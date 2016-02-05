@@ -5,6 +5,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [lein-localrepo "0.5.3"]
+                 [cli4clj "1.0.0"]
                  [org.clojure/tools.cli "0.3.3"]
                  [org.opensolaris/opengrok "0.12.1.5"]
                  [org.apache.commons/jrcs "0.12.1.5"]
