@@ -6,26 +6,17 @@
   (:gen-class))
 
 (def cli-options
-  [["-R" nil "<configuration.xml> Read configuration from the specified file"
-    :id :conf]
-   ["-d" nil "Symbol Definitions"
-    :id :def]
-   ;; ["-r" nil "Symbol References"
-   ;;  :id :ref]
-   ;; ["-p" nil "Path"
-   ;;  :id :path]
-   ;; ["-h" nil "History"
-   ;;  :id :hist]
-   ["-f" nil "Full Text"
-    :id :text ]
-   ;; ["-t" nil "Type"
-   ;;  :id :type]
-   ["-h" "--help"]])
+  [["-R" "--conf CONF" "<configuration.xml> Read configuration from the specified file"]
+   ["-d" "--def DEF" "Symbol Definitions"]
+   ["-r" "--ref REF" "Symbol References"]
+   ["-p" "--path PATH" "Path"]
+   ["-h" "--hist HIST" "History"]
+   ["-f" "--text TEXT" "Full Text"]
+   ["-t" "--type TYPE" "Type"]
+   ["-help" "--help"]])
 
 (defn usage [options-summary]
-  (->> ["Search -R <configuration.xml> [-d | -r | -p | -h | -f | -t] 'query string' .."
-        ""
-        "Usage: program-name [options] action"
+  (->> ["clj-opengrok -R <configuration.xml> [-d | -r | -p | -h | -f | -t] 'query string' .."
         ""
         "Options:"
         options-summary
@@ -41,15 +32,35 @@
   (println msg)
   (System/exit status))
 
+(def page (atom 1))
+(def option (atom {}))
+
+(defn set-page [p]
+  (reset! page p))
+
+(defn set-option [o]
+  (reset! option o))
+
 (defn -main [& args]
   (let [{:keys [options arguments errors summary]} (parse-opts args cli-options)]
-    ;; Handle help and error conditions
-    (println options "///" arguments "///" errors "///\n")
     (cond
       (:help options) (exit 0 (usage summary))
-      (not= (count arguments) 2) (exit 1 (usage summary))
+      (< (count options) 2) (exit 1 (usage summary))
       errors (exit 1 (error-msg errors)))
-    (start-cli {:cmds {:search {:fn #(search options arguments)
-                                }
+    (set-option options)
+    (search @page @option)
+    (start-cli {:cmds {:search {:fn #(do (set-page %1)
+                                         (set-option %2)
+                                         (search %1 %2))}
                        :s :search
-                       }})))
+                       :next {:fn #(do (set-page (inc @page))
+                                       (search @page @option))}
+                       :n :next
+                       :prev {:fn #(do (set-page (dec @page))
+                                       (search @page @option))}
+                       :p :prev
+                       :go-page {:fn #(do (set-page %)
+                                          (search % @option))}
+                       :g :go-page}
+                :prompt-string "opengrok> "})
+    (exit 0 "done")))
