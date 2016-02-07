@@ -1,6 +1,6 @@
-(defproject clj-opengrok "0.1.0-SNAPSHOT"
-  :description "FIXME: write description"
-  :url "http://example.com/FIXME"
+(defproject clj-opengrok "0.2.0"
+  :description "command line interface for OpenGrok"
+  :url "https://github.com/youngker/clj-opengrok"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.7.0"]
