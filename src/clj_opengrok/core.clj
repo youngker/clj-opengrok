@@ -48,19 +48,22 @@
       (< (count options) 2) (exit 1 (usage summary))
       errors (exit 1 (error-msg errors)))
     (set-option options)
-    (search @page @option)
-    (start-cli {:cmds {:search {:fn #(do (set-page %1)
-                                         (set-option %2)
-                                         (search %1 %2))}
+    (time (search @page @option))
+    (start-cli {:cmds {:search {:fn (fn [& args]
+                                      (let [{:keys [options]} (parse-opts
+                                                               args cli-options)]
+                                        (set-page 1)
+                                        (set-option options)
+                                        (time (search @page @option))))}
                        :s :search
                        :next {:fn #(do (set-page (inc @page))
-                                       (search @page @option))}
+                                       (time (search @page @option)))}
                        :n :next
                        :prev {:fn #(do (set-page (dec @page))
-                                       (search @page @option))}
+                                       (time (search @page @option)))}
                        :p :prev
                        :go-page {:fn #(do (set-page %)
-                                          (search % @option))}
+                                          (time (search % @option)))}
                        :g :go-page}
-                :prompt-string "opengrok> "})
+                :prompt-string ""})
     (exit 0 "done")))

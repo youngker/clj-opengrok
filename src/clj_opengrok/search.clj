@@ -2,10 +2,10 @@
   (:import
    [java.io File InputStreamReader FileInputStream]
    java.util.ArrayList
-   java.util.concurrent.Executors
+   [java.util.concurrent Executors ExecutorService]
    org.apache.lucene.store.FSDirectory
    org.opensolaris.opengrok.util.IOUtils
-   org.opensolaris.opengrok.search.context.Context
+   [org.opensolaris.opengrok.search.context Context HistoryContext]
    org.opensolaris.opengrok.configuration.RuntimeEnvironment
    [org.opensolaris.opengrok.search Hit QueryBuilder]
    [org.opensolaris.opengrok.analysis Definitions Definitions$Tag]
@@ -14,6 +14,7 @@
     SortField$Type]))
 
 (def current-configuration (atom nil))
+(def executor (atom nil))
 
 (def env (RuntimeEnvironment/getInstance))
 
@@ -29,8 +30,17 @@
        (.setFreetext query-builder (:text options))
        (.setType query-builder (:type options)))))
 
-(defn get-context [query query-builder]
-  (Context. query (.getQueries query-builder)))
+(defn get-source-context [query query-builder]
+  (let [source-context (Context. query (.getQueries query-builder))]
+    (if (.isEmpty source-context)
+      nil
+      source-context)))
+
+(defn get-history-context [query]
+  (let [history-context (HistoryContext. query)]
+    (if (.isEmpty history-context)
+      nil
+      history-context)))
 
 (defn get-root-path []
   (.getSourceRootPath env))
@@ -52,9 +62,11 @@
         nthread (+ 2 (* 2 np))
         searchable (into-array (get-index-reader projects))]
     (if (> np 1)
-      (IndexSearcher.
-       (MultiReader. searchable true)
-       (Executors/newFixedThreadPool nthread))
+      (do
+        (reset! executor (Executors/newFixedThreadPool nthread))
+        (IndexSearcher.
+         (MultiReader. searchable true)
+         @executor))
       (IndexSearcher. searchable))))
 
 (defn get-sort []
@@ -87,27 +99,42 @@
 
 (defn print-hit [hit]
   (let [root (get-root-path)
-        file (File. root (.getPath hit))]
-    (str (.getAbsolutePath file) ":" (.getLineno hit) ": " (.getLine hit))))
+        file (File. root (.getPath hit))
+        line (.getLine hit)]
+    (str (.getAbsolutePath file) ":" (.getLineno hit) ": "
+         (if (> (count line) 200)
+           (subs line 0 200)
+           line))))
 
-(defn get-tag [context doc]
-  (when (= "p" (.get doc "t"))
-    (let [filename (.get doc "path")
-          tag-field (get-tags-field doc)
-          hit (ArrayList.)
-          tags (if tag-field
-                 (Definitions/deserialize (.bytes (.binaryValue
-                                                   tag-field)))
-                 nil)]
-      (.getContext context
-                   (InputStreamReader. (FileInputStream. (str
-                                                          (get-root-path)
-                                                          filename))) nil nil nil
-                   filename tags false false hit)
-      (map #(print-hit %) hit))))
+(defn get-tag [source-context history-context doc]
+  (let [filename (.get doc "path")
+        tag-field (get-tags-field doc)
+        hit (ArrayList.)
+        tags (if tag-field
+               (Definitions/deserialize
+                 (.bytes (.binaryValue tag-field)))
+               nil)]
 
-(defn get-tags [context docs]
-  (flatten (map #(get-tag context %) docs)))
+    (when (and source-context (= "p" (.get doc "t")))
+      (.getContext source-context
+                   (InputStreamReader.
+                    (FileInputStream. (str
+                                       (get-root-path)
+                                       filename))) nil nil nil
+                   filename tags false false hit))
+
+    (when history-context
+      (.getContext history-context
+                   (str (get-root-path) filename) filename hit))
+
+    (when-not (and source-context history-context)
+      (.add hit (Hit. filename "..." "1" false true)))
+
+    (map #(print-hit %) hit)))
+
+(defn get-tags [source-context history-context docs]
+  (remove nil? (flatten
+                (map #(get-tag source-context history-context %) docs))))
 
 (defn set-configuration [conf]
   (.readConfiguration env (File. conf)))
@@ -117,11 +144,14 @@
     (println result)))
 
 (defn print-page [page totalhits]
-  (doseq [num (take 10 (drop (* 10 (int (/ (dec page) 10)))
-                             (range 1 (inc (/ totalhits 25)))))]
-    (if (= num page)
-      (print (str "[" num "]") "| ")
-      (print num "| ")))
+  (let [len (take 10 (drop (* 10 (int (/ (dec page) 10)))
+                           (range 1 (inc (/ totalhits (get-hits-per-page))))))]
+    (doseq [num len]
+      (if (= num page)
+        (print (str " [" num "]"))
+        (print "" num))
+      (when (not= num (last len))
+        (print " |"))))
   (println ""))
 
 (defn projects? []
@@ -135,7 +165,8 @@
        (* page (get-hits-per-page))))
 
 (defn destroy-resource [searcher]
-  (IOUtils/close (.getIndexReader searcher)))
+  (IOUtils/close (.getIndexReader searcher))
+  (.shutdown @executor))
 
 (defn search [page options]
   (when-not (= @current-configuration (:conf options))
@@ -145,7 +176,8 @@
   (let [root (get-root-path)
         query-builder (get-query-builder)
         query (get-query query-builder options)
-        context (get-context query query-builder)
+        source-context (get-source-context query query-builder)
+        history-context (get-history-context query)
         searcher (get-searcher
                   (if (projects?)
                     (get-projects)
@@ -155,9 +187,9 @@
         hits (get-hits fdocs)
         hits (get-page-hits page hits)
         docs (get-docs searcher hits)
-        tags (get-tags context docs)]
+        tags (get-tags source-context history-context docs)]
+    (println "Results::" (get-page page) " of " totalhits)
     (print-page page totalhits)
     (print-tags tags)
     (print-page page totalhits)
-    (destroy-resource searcher)
-    (println "Results " (get-page page) " of " totalhits)))
+    (destroy-resource searcher)))
