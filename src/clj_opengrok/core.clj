@@ -16,12 +16,14 @@
    ["-help" "--help"]])
 
 (defn usage [options-summary]
-  (string/join ["clj-opengrok -R <configuration.xml> [-d | -r | -p | -h | -f | -t] 'query string' .."
-                ""
-                "Options:"
-                options-summary
-                ""
-                "Please refer to the manual page for more information."]))
+  (string/join
+   \newline
+   ["clj-opengrok -R <configuration.xml> [-d | -r | -p | -h | -f | -t] 'query string' .."
+    ""
+    "Options:"
+    options-summary
+    ""
+    "Please refer to the manual page for more information."]))
 
 (defn error-msg [errors]
   (str "The following errors occurred while parsing your command:\n\n"
@@ -57,16 +59,25 @@
     (time (search @page @option))
     (start-cli {:cmds {:search {:fn (fn [& args]
                                       (let [{:keys [options]} (parse-opts
-                                                               args cli-options)]
+                                                               args
+                                                               cli-options)]
                                         (set-page 1)
                                         (set-option options)
-                                        (do (time (search @page @option)) nil)))}
+                                        (do (time (search @page @option)) nil)))
+                                :short-info "search"
+                                :long-info "E.g.: s \"-f\" \\\"clojure opengrok\\\""}
                        :s :search
-                       :next {:fn #(time (clj-opengrok-search (inc @page)))}
+                       :next {:fn #(time (clj-opengrok-search (inc @page)))
+                              :short-info "next page"
+                              :long-info "E.g.: next or n"}
                        :n :next
-                       :prev {:fn #(time (clj-opengrok-search (dec @page)))}
+                       :prev {:fn #(time (clj-opengrok-search (dec @page)))
+                              :short-info "previous page"
+                              :long-info "E.g.: prev or p"}
                        :p :prev
-                       :go-page {:fn #(clj-opengrok-search %)}
+                       :go-page {:fn #(clj-opengrok-search %)
+                                 :short-info "go to the page"
+                                 :long-info "E.g.: g numberofpage"}
                        :g :go-page}
                 :prompt-string ""})
     (exit 0 "done")))

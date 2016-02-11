@@ -6,7 +6,9 @@ Command Line Interface for OpenGrok
 
 ## Installation
 
-- Download clj-opengrok-0.2.0.jar
+- Download clj-opengrok-0.3.0-standalone.jar
+
+[clj-opengrok-0.3.0-standalone.jar.zip](https://github.com/youngker/clj-opengrok/files/126109/clj-opengrok-0.3.0-standalone.jar.zip)
 
 
 ## Requirements
