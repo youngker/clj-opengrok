@@ -14,7 +14,7 @@ Command Line Interface for OpenGrok
 
 - Download clj-opengrok-0.3.0-standalone.jar
 
-[clj-opengrok-0.3.0-standalone.jar.zip](https://github.com/youngker/clj-opengrok/files/126109/clj-opengrok-0.3.0-standalone.jar.zip)
+[clj-opengrok-0.3.0-standalone.jar.zip](https://github.com/youngker/clj-opengrok/files/126413/clj-opengrok-0.3.0-standalone.jar.zip)
 
 ```shell
 $ java -jar clj-opengrok-0.3.0-standalone.jar -R /path/to/configuration.xml -f text
