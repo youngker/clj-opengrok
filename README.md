@@ -4,12 +4,21 @@ Command Line Interface for OpenGrok
 
 ## ScreenShot
 
+<img align="center" src="https://raw.github.com/youngker/clj-opengrok/master/img/usage.png">
+
+<img align="center" src="https://raw.github.com/youngker/clj-opengrok/master/img/pagination.png">
+
+<img align="center" src="https://raw.github.com/youngker/eopengrok.el/master/command.png">
+
 ## Installation
 
 - Download clj-opengrok-0.3.0-standalone.jar
 
 [clj-opengrok-0.3.0-standalone.jar.zip](https://github.com/youngker/clj-opengrok/files/126109/clj-opengrok-0.3.0-standalone.jar.zip)
 
+```shell
+$ java -jar clj-opengrok-0.3.0-standalone.jar -R /path/to/configuration.xml -f text
+```
 
 ## Requirements
 
