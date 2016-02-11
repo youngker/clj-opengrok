@@ -57,7 +57,7 @@
 (defn number-processor []
   (.availableProcessors (Runtime/getRuntime)))
 
-(defn get-searcher [projects]
+(defn get-searcher-in-projects [projects]
   (let [np (number-processor)
         nthread (+ 2 (* 2 np))
         searchable (into-array (get-index-reader projects))]
@@ -68,6 +68,12 @@
          (MultiReader. ^MultiReader searchable true)
          ^ExecutorService @executor))
       (IndexSearcher. ^MultiReader searchable))))
+
+(defn get-searcher []
+  (IndexSearcher. (DirectoryReader/open
+                   (FSDirectory/open
+                    (File.
+                     (str (get-data-root-path) "/index"))))))
 
 (defn get-sort []
   (Sort. (SortField. "date" SortField$Type/STRING true)))
@@ -127,7 +133,7 @@
       (.getContext history-context
                    (str (get-root-path) filename) filename hit))
 
-    (when-not (and source-context history-context)
+    (when (and (not  source-context) (not history-context))
       (.add hit (Hit. filename "..." "1" false true)))
 
     (map #(print-hit %) hit)))
@@ -160,36 +166,41 @@
 (defn get-projects []
   (.getProjects ^RuntimeEnvironment env))
 
-(defn get-page [page]
+(defn get-page [page totalhits]
   (str (inc (* (dec page) (get-hits-per-page))) " - "
-       (* page (get-hits-per-page))))
+       (let [p (* page (get-hits-per-page))]
+         (if (> p totalhits)
+           totalhits
+           p))))
 
 (defn destroy-resource [^IndexSearcher searcher]
   (IOUtils/close ^IndexReader (.getIndexReader searcher))
-  (.shutdown ^ExecutorService @executor))
+  (when @executor
+    (.shutdown ^ExecutorService @executor)))
 
 (defn search [page options]
-  (when-not (= @current-configuration (:conf options))
-    (reset! current-configuration (:conf options))
-    (set-configuration (:conf options)))
-
-  (let [root (get-root-path)
-        query-builder (get-query-builder)
-        query (get-query query-builder options)
-        source-context (get-source-context query query-builder)
-        history-context (get-history-context query)
-        searcher (get-searcher
-                  (if (projects?)
-                    (get-projects)
-                    (str (get-data-root-path) "/index")))
-        fdocs (get-fdocs page searcher query)
-        totalhits (get-total-hits fdocs)
-        hits (get-hits fdocs)
-        hits (get-page-hits page hits)
-        docs (get-docs searcher hits)
-        tags (get-tags source-context history-context docs)]
-    (println "Results::" (get-page page) " of " totalhits)
-    (print-page page totalhits)
-    (print-tags tags)
-    (print-page page totalhits)
-    (destroy-resource searcher)))
+  (when (pos? page)
+    (when (nil? @current-configuration)
+      (reset! current-configuration (:conf options))
+      (set-configuration @current-configuration))
+    (let [root (get-root-path)
+          query-builder (get-query-builder)
+          query (get-query query-builder options)
+          source-context (get-source-context query query-builder)
+          history-context (get-history-context query)
+          searcher (if (projects?)
+                     (get-searcher-in-projects (get-projects))
+                     (get-searcher))
+          fdocs (get-fdocs page searcher query)
+          totalhits (get-total-hits fdocs)
+          hits (get-hits fdocs)
+          hits (get-page-hits page hits)
+          docs (get-docs searcher hits)
+          tags (get-tags source-context history-context docs)]
+      (when (pos? (count tags))
+        (println "Results:" (get-page page totalhits) " of " totalhits)
+        (print-page page totalhits)
+        (print-tags tags)
+        (print-page page totalhits))
+      (destroy-resource searcher)
+      (count tags))))

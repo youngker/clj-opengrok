@@ -1,4 +1,4 @@
-(defproject clj-opengrok "0.2.0"
+(defproject clj-opengrok "0.3.0"
   :description "command line interface for OpenGrok"
   :url "https://github.com/youngker/clj-opengrok"
   :license {:name "Eclipse Public License"
@@ -14,6 +14,6 @@
                  [org.apache.lucene/lucene-queryparser "4.7.0"]
                  [org.apache.lucene/lucene-analyzers-common "4.7.0"]
                  [org.apache.lucene/lucene-highlighter "4.7.0"]]
-  :warn-on-reflection true
+  :global-vars {*warn-on-reflection* true}
   :aot [clj-opengrok.core]
   :main clj-opengrok.core)

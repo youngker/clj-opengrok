@@ -40,6 +40,13 @@
 (defn set-option [o]
   (reset! option o))
 
+(defn clj-opengrok-search [p]
+  (if (pos? p)
+    (if (pos? (search p @option))
+      (do (set-page p) nil)
+      (do (search (set-page (dec p)) @option) nil))
+    (do (search 1 @option) nil)))
+
 (defn -main [& args]
   (let [{:keys [options arguments errors summary]} (parse-opts args cli-options)]
     (cond
@@ -53,16 +60,13 @@
                                                                args cli-options)]
                                         (set-page 1)
                                         (set-option options)
-                                        (time (search @page @option))))}
+                                        (do (time (search @page @option)) nil)))}
                        :s :search
-                       :next {:fn #(do (set-page (inc @page))
-                                       (time (search @page @option)))}
+                       :next {:fn #(time (clj-opengrok-search (inc @page)))}
                        :n :next
-                       :prev {:fn #(do (set-page (dec @page))
-                                       (time (search @page @option)))}
+                       :prev {:fn #(time (clj-opengrok-search (dec @page)))}
                        :p :prev
-                       :go-page {:fn #(do (set-page %)
-                                          (time (search @page @option)))}
+                       :go-page {:fn #(clj-opengrok-search %)}
                        :g :go-page}
                 :prompt-string ""})
     (exit 0 "done")))
