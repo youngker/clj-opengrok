@@ -2,13 +2,13 @@
 
 Command Line Interface for OpenGrok
 
+
+
 ## ScreenShot
 
 <img align="center" src="https://raw.github.com/youngker/clj-opengrok/master/img/usage.png">
-
 <img align="center" src="https://raw.github.com/youngker/clj-opengrok/master/img/pagination.png">
-
-<img align="center" src="https://raw.github.com/youngker/eopengrok.el/master/command.png">
+<img align="center" src="https://raw.github.com/youngker/clj-opengrok/master/img/command.png">
 
 ## Installation
 
