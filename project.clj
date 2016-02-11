@@ -14,5 +14,6 @@
                  [org.apache.lucene/lucene-queryparser "4.7.0"]
                  [org.apache.lucene/lucene-analyzers-common "4.7.0"]
                  [org.apache.lucene/lucene-highlighter "4.7.0"]]
+  :warn-on-reflection true
   :aot [clj-opengrok.core]
   :main clj-opengrok.core)

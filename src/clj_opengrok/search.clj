@@ -1,17 +1,19 @@
 (ns clj-opengrok.search
   (:import
    [java.io File InputStreamReader FileInputStream]
-   java.util.ArrayList
+   [java.util List ArrayList]
    [java.util.concurrent Executors ExecutorService]
+   org.apache.lucene.index.IndexableField
+   org.apache.lucene.document.Document
    org.apache.lucene.store.FSDirectory
    org.opensolaris.opengrok.util.IOUtils
    [org.opensolaris.opengrok.search.context Context HistoryContext]
-   org.opensolaris.opengrok.configuration.RuntimeEnvironment
+   [org.opensolaris.opengrok.configuration RuntimeEnvironment Project]
    [org.opensolaris.opengrok.search Hit QueryBuilder]
    [org.opensolaris.opengrok.analysis Definitions Definitions$Tag]
    [org.apache.lucene.index IndexReader MultiReader DirectoryReader]
    [org.apache.lucene.search TopScoreDocCollector IndexSearcher Sort SortField
-    SortField$Type]))
+    SortField$Type ScoreDoc TopFieldDocs Query]))
 
 (def current-configuration (atom nil))
 (def executor (atom nil))
@@ -21,7 +23,7 @@
 (defn get-query-builder []
   (QueryBuilder.))
 
-(defn get-query [query-builder options]
+(defn get-query [^QueryBuilder query-builder options]
   (.build
    (do (.setDefs query-builder (:def options))
        (.setRefs query-builder (:ref options))
@@ -30,29 +32,27 @@
        (.setFreetext query-builder (:text options))
        (.setType query-builder (:type options)))))
 
-(defn get-source-context [query query-builder]
+(defn get-source-context [query ^QueryBuilder query-builder]
   (let [source-context (Context. query (.getQueries query-builder))]
-    (if (.isEmpty source-context)
-      nil
+    (when-not (.isEmpty source-context)
       source-context)))
 
 (defn get-history-context [query]
   (let [history-context (HistoryContext. query)]
-    (if (.isEmpty history-context)
-      nil
+    (when-not (.isEmpty history-context)
       history-context)))
 
-(defn get-root-path []
-  (.getSourceRootPath env))
+(defn get-root-path ^String []
+  (.getSourceRootPath ^RuntimeEnvironment env))
 
 (defn get-data-root-path []
-  (.getDataRootFile env))
+  (.getDataRootFile ^RuntimeEnvironment env))
 
 (defn get-index-reader [projects]
   (map #(DirectoryReader/open
          (FSDirectory/open
           (File. (str (get-data-root-path)
-                      "/index" (.getPath %))))) projects))
+                      "/index" (.getPath ^Project %))))) projects))
 
 (defn number-processor []
   (.availableProcessors (Runtime/getRuntime)))
@@ -65,23 +65,23 @@
       (do
         (reset! executor (Executors/newFixedThreadPool nthread))
         (IndexSearcher.
-         (MultiReader. searchable true)
-         @executor))
-      (IndexSearcher. searchable))))
+         (MultiReader. ^MultiReader searchable true)
+         ^ExecutorService @executor))
+      (IndexSearcher. ^MultiReader searchable))))
 
 (defn get-sort []
   (Sort. (SortField. "date" SortField$Type/STRING true)))
 
 (defn get-hits-per-page []
-  (.getHitsPerPage env))
+  (.getHitsPerPage ^RuntimeEnvironment env))
 
-(defn get-fdocs [page searcher query]
-  (.search searcher query (* page (get-hits-per-page)) (get-sort)))
+(defn get-fdocs [page ^IndexSearcher searcher ^Query query]
+  (.search searcher query (int (* page (get-hits-per-page))) ^Sort (get-sort)))
 
-(defn get-total-hits [fdocs]
+(defn get-total-hits [^TopFieldDocs fdocs]
   (.totalHits fdocs))
 
-(defn get-hits [fdocs]
+(defn get-hits [^TopFieldDocs fdocs]
   (.scoreDocs fdocs))
 
 (defn get-page-hits [page hits]
@@ -91,13 +91,13 @@
          (drop n)
          (take hpp))))
 
-(defn get-docs [searcher hits]
-  (map #(.doc searcher (.doc %)) hits))
+(defn get-docs [^IndexSearcher searcher hits]
+  (map #(.doc searcher (.doc ^ScoreDoc %)) hits))
 
-(defn get-tags-field [doc]
+(defn get-tags-field [^Document doc]
   (.getField doc "tags"))
 
-(defn print-hit [hit]
+(defn print-hit [^Hit hit]
   (let [root (get-root-path)
         file (File. root (.getPath hit))
         line (.getLine hit)]
@@ -106,14 +106,14 @@
            (subs line 0 200)
            line))))
 
-(defn get-tag [source-context history-context doc]
+(defn get-tag [^Context source-context ^HistoryContext history-context
+               ^Document doc]
   (let [filename (.get doc "path")
         tag-field (get-tags-field doc)
         hit (ArrayList.)
-        tags (if tag-field
+        tags (when tag-field
                (Definitions/deserialize
-                 (.bytes (.binaryValue tag-field)))
-               nil)]
+                 (.bytes (.binaryValue ^IndexableField tag-field))))]
 
     (when (and source-context (= "p" (.get doc "t")))
       (.getContext source-context
@@ -136,8 +136,8 @@
   (remove nil? (flatten
                 (map #(get-tag source-context history-context %) docs))))
 
-(defn set-configuration [conf]
-  (.readConfiguration env (File. conf)))
+(defn set-configuration [^String conf]
+  (.readConfiguration ^RuntimeEnvironment env (File. conf)))
 
 (defn print-tags [tags]
   (doseq [result tags]
@@ -155,18 +155,18 @@
   (println ""))
 
 (defn projects? []
-  (.hasProjects env))
+  (.hasProjects ^RuntimeEnvironment env))
 
 (defn get-projects []
-  (.getProjects env))
+  (.getProjects ^RuntimeEnvironment env))
 
 (defn get-page [page]
   (str (inc (* (dec page) (get-hits-per-page))) " - "
        (* page (get-hits-per-page))))
 
-(defn destroy-resource [searcher]
-  (IOUtils/close (.getIndexReader searcher))
-  (.shutdown @executor))
+(defn destroy-resource [^IndexSearcher searcher]
+  (IOUtils/close ^IndexReader (.getIndexReader searcher))
+  (.shutdown ^ExecutorService @executor))
 
 (defn search [page options]
   (when-not (= @current-configuration (:conf options))

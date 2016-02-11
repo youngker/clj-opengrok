@@ -16,13 +16,12 @@
    ["-help" "--help"]])
 
 (defn usage [options-summary]
-  (->> ["clj-opengrok -R <configuration.xml> [-d | -r | -p | -h | -f | -t] 'query string' .."
-        ""
-        "Options:"
-        options-summary
-        ""
-        "Please refer to the manual page for more information."]
-       (string/join \newline)))
+  (string/join ["clj-opengrok -R <configuration.xml> [-d | -r | -p | -h | -f | -t] 'query string' .."
+                ""
+                "Options:"
+                options-summary
+                ""
+                "Please refer to the manual page for more information."]))
 
 (defn error-msg [errors]
   (str "The following errors occurred while parsing your command:\n\n"
@@ -63,7 +62,7 @@
                                        (time (search @page @option)))}
                        :p :prev
                        :go-page {:fn #(do (set-page %)
-                                          (time (search % @option)))}
+                                          (time (search @page @option)))}
                        :g :go-page}
                 :prompt-string ""})
     (exit 0 "done")))
