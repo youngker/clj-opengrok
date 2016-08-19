@@ -1,206 +1,74 @@
 (ns clj-opengrok.search
-  (:import
-   [java.io File InputStreamReader FileInputStream]
-   [java.util List ArrayList]
-   [java.util.concurrent Executors ExecutorService]
-   org.apache.lucene.index.IndexableField
-   org.apache.lucene.document.Document
-   org.apache.lucene.store.FSDirectory
-   org.opensolaris.opengrok.util.IOUtils
-   [org.opensolaris.opengrok.search.context Context HistoryContext]
-   [org.opensolaris.opengrok.configuration RuntimeEnvironment Project]
-   [org.opensolaris.opengrok.search Hit QueryBuilder]
-   [org.opensolaris.opengrok.analysis Definitions Definitions$Tag]
-   [org.apache.lucene.index IndexReader MultiReader DirectoryReader]
-   [org.apache.lucene.search TopScoreDocCollector IndexSearcher Sort SortField
-    SortField$Type ScoreDoc TopFieldDocs Query]))
+  (:require [clj-opengrok.core :refer :all]
+            [clojure.string :as string]
+            [cli4clj.cli :refer [start-cli]]
+            [clojure.tools.cli :refer [parse-opts]])
+  (:gen-class))
 
-(def current-configuration (atom nil))
-(def executor (atom nil))
+(def cli-options
+  [["-R" "--conf CONF" "<configuration.xml> Read configuration
+ from the specified file"]
+   ["-d" "--def DEF" "Symbol Definitions"]
+   ["-r" "--ref REF" "Symbol References"]
+   ["-p" "--path PATH" "Path"]
+   ["-h" "--hist HIST" "History"]
+   ["-f" "--text TEXT" "Full Text"]
+   ["-t" "--type TYPE" "Type"]
+   ["-a" "--page PAGE" "Page"]
+   ["-help" "--help"]])
 
-(def env (RuntimeEnvironment/getInstance))
+(defn usage [options-summary]
+  (string/join
+   \newline
+   ["clj-opengrok -R <configuration.xml> [-d | -r | -p | -h | -f | -t] 'query string' .."
+    ""
+    "Options:"
+    options-summary
+    ""
+    "Please refer to the manual page for more information."]))
 
-(defn get-query-builder []
-  (QueryBuilder.))
+(defn error-msg [errors]
+  (str "The following errors occurred while parsing your command:\n\n"
+       (string/join \newline errors)))
 
-(defn get-query [^QueryBuilder query-builder options]
-  (.build
-   (do (.setDefs query-builder (:def options))
-       (.setRefs query-builder (:ref options))
-       (.setPath query-builder (:path options))
-       (.setHist query-builder (:hist options))
-       (.setFreetext query-builder (:text options))
-       (.setType query-builder (:type options)))))
+(defn exit [status msg]
+  (println msg)
+  (System/exit status))
 
-(defn get-source-context [query ^QueryBuilder query-builder]
-  (let [source-context (Context. query (.getQueries query-builder))]
-    (when-not (.isEmpty source-context)
-      source-context)))
+(defn- set-search-options [opts args & [page]]
+  (reset! opts (:options (assoc-in (parse-opts args cli-options)
+                                   [:options :page] (or page 1)))))
 
-(defn get-history-context [query]
-  (let [history-context (HistoryContext. query)]
-    (when-not (.isEmpty history-context)
-      history-context)))
+(defn- update-search-options [opts args & [page]]
+  (reset! opts (merge (select-keys @opts [:conf])
+                      (:options (parse-opts args cli-options))
+                      {:page (or page 1)})))
 
-(defn get-root-path ^String []
-  (.getSourceRootPath ^RuntimeEnvironment env))
+(defn- loop-prompt [args]
+  (let [opts (atom {})]
+    (search (set-search-options opts args))
+    (start-cli
+     {:cmds
+      {:search
+       {:fn (fn [& args]
+              (search (update-search-options opts args)))
+        :short-info "search"
+        :long-info "E.g.: s \"-f\" \\\"clojure opengrok\\\""}
+       :s :search
+       :next {:fn #(search (swap! opts update-in [:page] inc))
+              :short-info "next page"
+              :long-info "E.g.: next or n"}
+       :n :next
+       :prev {:fn #(search (swap! opts update-in [:page] dec))
+              :short-info "previous page"
+              :long-info "E.g.: prev or p"}
+       :p :prev
+       :go-page {:fn #(search (swap! opts assoc-in [:page] %))
+                 :short-info "go to the page"
+                 :long-info "E.g.: g numberofpage"}
+       :g :go-page}
+      :prompt-string "clj-opengrok > "}))
+  (exit 0 "done"))
 
-(defn get-data-root-path []
-  (.getDataRootFile ^RuntimeEnvironment env))
-
-(defn get-index-reader [projects]
-  (map #(DirectoryReader/open
-         (FSDirectory/open
-          (File. (str (get-data-root-path)
-                      "/index" (.getPath ^Project %))))) projects))
-
-(defn number-processor []
-  (.availableProcessors (Runtime/getRuntime)))
-
-(defn get-searcher-in-projects [projects]
-  (let [np (number-processor)
-        nthread (+ 2 (* 2 np))
-        searchable (into-array (get-index-reader projects))]
-    (if (> np 1)
-      (do
-        (reset! executor (Executors/newFixedThreadPool nthread))
-        (IndexSearcher.
-         (MultiReader. ^MultiReader searchable true)
-         ^ExecutorService @executor))
-      (IndexSearcher. ^MultiReader searchable))))
-
-(defn get-searcher []
-  (IndexSearcher. (DirectoryReader/open
-                   (FSDirectory/open
-                    (File.
-                     (str (get-data-root-path) "/index"))))))
-
-(defn get-sort []
-  (Sort. (SortField. "date" SortField$Type/STRING true)))
-
-(defn get-hits-per-page []
-  (.getHitsPerPage ^RuntimeEnvironment env))
-
-(defn get-fdocs [page ^IndexSearcher searcher ^Query query]
-  (.search searcher query (int (* page (get-hits-per-page))) ^Sort (get-sort)))
-
-(defn get-total-hits [^TopFieldDocs fdocs]
-  (.totalHits fdocs))
-
-(defn get-hits [^TopFieldDocs fdocs]
-  (.scoreDocs fdocs))
-
-(defn get-page-hits [page hits]
-  (let [hpp (get-hits-per-page)
-        n (* (dec page) hpp)]
-    (->> hits
-         (drop n)
-         (take hpp))))
-
-(defn get-docs [^IndexSearcher searcher hits]
-  (map #(.doc searcher (.doc ^ScoreDoc %)) hits))
-
-(defn get-tags-field [^Document doc]
-  (.getField doc "tags"))
-
-(defn print-hit [^Hit hit]
-  (let [root (get-root-path)
-        file (File. root (.getPath hit))
-        line (.getLine hit)]
-    (str (.getAbsolutePath file) ":" (.getLineno hit) ": "
-         (if (> (count line) 200)
-           (subs line 0 200)
-           line))))
-
-(defn get-tag [^Context source-context ^HistoryContext history-context
-               ^Document doc]
-  (let [filename (.get doc "path")
-        tag-field (get-tags-field doc)
-        hit (ArrayList.)
-        tags (when tag-field
-               (Definitions/deserialize
-                 (.bytes (.binaryValue ^IndexableField tag-field))))]
-
-    (when (and source-context (= "p" (.get doc "t")))
-      (.getContext source-context
-                   (InputStreamReader.
-                    (FileInputStream. (str
-                                       (get-root-path)
-                                       filename))) nil nil nil
-                   filename tags false false hit))
-
-    (when history-context
-      (.getContext history-context
-                   (str (get-root-path) filename) filename hit))
-
-    (when (and (not  source-context) (not history-context))
-      (.add hit (Hit. filename "..." "1" false true)))
-
-    (map #(print-hit %) hit)))
-
-(defn get-tags [source-context history-context docs]
-  (remove nil? (flatten
-                (map #(get-tag source-context history-context %) docs))))
-
-(defn set-configuration [^String conf]
-  (.readConfiguration ^RuntimeEnvironment env (File. conf)))
-
-(defn print-tags [tags]
-  (doseq [result tags]
-    (println result)))
-
-(defn print-page [page totalhits]
-  (let [len (take 10 (drop (* 10 (int (/ (dec page) 10)))
-                           (range 1 (inc (/ totalhits (get-hits-per-page))))))]
-    (doseq [num len]
-      (if (= num page)
-        (print (str " [" num "]"))
-        (print "" num))
-      (when (not= num (last len))
-        (print " |"))))
-  (println ""))
-
-(defn projects? []
-  (.hasProjects ^RuntimeEnvironment env))
-
-(defn get-projects []
-  (.getProjects ^RuntimeEnvironment env))
-
-(defn get-page [page totalhits]
-  (str (inc (* (dec page) (get-hits-per-page))) " - "
-       (let [p (* page (get-hits-per-page))]
-         (if (> p totalhits)
-           totalhits
-           p))))
-
-(defn destroy-resource [^IndexSearcher searcher]
-  (IOUtils/close ^IndexReader (.getIndexReader searcher))
-  (when @executor
-    (.shutdown ^ExecutorService @executor)))
-
-(defn search [page options]
-  (when (pos? page)
-    (when (nil? @current-configuration)
-      (reset! current-configuration (:conf options))
-      (set-configuration @current-configuration))
-    (let [root (get-root-path)
-          query-builder (get-query-builder)
-          query (get-query query-builder options)
-          source-context (get-source-context query query-builder)
-          history-context (get-history-context query)
-          searcher (if (projects?)
-                     (get-searcher-in-projects (get-projects))
-                     (get-searcher))
-          fdocs (get-fdocs page searcher query)
-          totalhits (get-total-hits fdocs)
-          hits (get-hits fdocs)
-          hits (get-page-hits page hits)
-          docs (get-docs searcher hits)
-          tags (get-tags source-context history-context docs)]
-      (when (pos? (count tags))
-        (println "Results:" (get-page page totalhits) " of " totalhits)
-        (print-page page totalhits)
-        (print-tags tags)
-        (print-page page totalhits))
-      (destroy-resource searcher)
-      (count tags))))
+(defn -main [& args]
+  (loop-prompt args))
