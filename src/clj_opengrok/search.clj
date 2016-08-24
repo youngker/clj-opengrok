@@ -14,7 +14,7 @@
    ["-h" "--hist HIST" "History"]
    ["-f" "--text TEXT" "Full Text"]
    ["-t" "--type TYPE" "Type"]
-   ["-a" "--page PAGE" "Page"]
+   ["-a" "--all"]
    ["-help" "--help"]])
 
 (defn usage [options-summary]
@@ -55,18 +55,12 @@
         :short-info "search"
         :long-info "E.g.: s \"-f\" \\\"clojure opengrok\\\""}
        :s :search
-       :next {:fn #(search (swap! opts update-in [:page] inc))
+       :next {:fn (fn []
+                    (when-not (contains? @opts :all)
+                      (search (swap! opts update-in [:page] inc))))
               :short-info "next page"
               :long-info "E.g.: next or n"}
-       :n :next
-       :prev {:fn #(search (swap! opts update-in [:page] dec))
-              :short-info "previous page"
-              :long-info "E.g.: prev or p"}
-       :p :prev
-       :go-page {:fn #(search (swap! opts assoc-in [:page] %))
-                 :short-info "go to the page"
-                 :long-info "E.g.: g numberofpage"}
-       :g :go-page}
+       :n :next}
       :prompt-string "clj-opengrok > "}))
   (exit 0 "done"))
 

@@ -15,32 +15,41 @@
    [org.apache.lucene.search IndexSearcher Sort SortField
     SortField$Type ScoreDoc TopFieldDocs Query]))
 
-(def current-configuration (atom nil))
-(def executor (atom nil))
-
 (def env (RuntimeEnvironment/getInstance))
 
-(defn get-query-builder []
-  (QueryBuilder.))
+(defn- read-configuration [^String conf]
+  (.readConfiguration ^RuntimeEnvironment env (File. conf)))
 
-(defn get-query [^QueryBuilder query-builder options]
-  (.build
-   (do (.setDefs query-builder (:def options))
-       (.setRefs query-builder (:ref options))
-       (.setPath query-builder (:path options))
-       (.setHist query-builder (:hist options))
-       (.setFreetext query-builder (:text options))
-       (.setType query-builder (:type options)))))
+(defn- make-query-builder [opts]
+  (assoc opts :query-builder (QueryBuilder.)))
 
-(defn get-source-context [query ^QueryBuilder query-builder]
-  (let [source-context (Context. query (.getQueries query-builder))]
-    (when-not (.isEmpty source-context)
-      source-context)))
+(defn- make-query [opts]
+  (let [query-builder ^QueryBuilder (:query-builder opts)]
+    (assoc opts
+           :query (.build
+                   (do (.setDefs query-builder (:def opts))
+                       (.setRefs query-builder (:ref opts))
+                       (.setPath query-builder (:path opts))
+                       (.setHist query-builder (:hist opts))
+                       (.setFreetext query-builder (:text opts))
+                       (.setType query-builder (:type opts)))))))
 
-(defn get-history-context [query]
-  (let [history-context (HistoryContext. query)]
-    (when-not (.isEmpty history-context)
-      history-context)))
+(defn- make-source-context [opts]
+  (let [source-context
+        (Context. (:query opts) (.getQueries ^QueryBuilder (:query-builder opts)))]
+    (assoc opts :source-context source-context)))
+
+(defn- make-history-context [opts]
+  (assoc opts :history-context (HistoryContext. (:query opts))))
+
+(defn- has-projects? []
+  (.hasProjects ^RuntimeEnvironment env))
+
+(defn- get-projects []
+  (.getProjects ^RuntimeEnvironment env))
+
+(defn number-processor []
+  (.availableProcessors (Runtime/getRuntime)))
 
 (defn get-root-path ^String []
   (.getSourceRootPath ^RuntimeEnvironment env))
@@ -54,26 +63,30 @@
           (File. (str (get-data-root-path)
                       "/index" (.getPath ^Project %))))) projects))
 
-(defn number-processor []
-  (.availableProcessors (Runtime/getRuntime)))
+(def executor (atom nil))
 
-(defn get-searcher-in-projects [projects]
+(defn get-searcher-in-projects [projects opts]
   (let [np (number-processor)
         nthread (+ 2 (* 2 np))
         searchable (into-array (get-index-reader projects))]
     (if (> np 1)
       (do
         (reset! executor (Executors/newFixedThreadPool nthread))
-        (IndexSearcher.
-         (MultiReader. ^MultiReader searchable true)
-         ^ExecutorService @executor))
-      (IndexSearcher. ^MultiReader searchable))))
+        (assoc opts :searcher (IndexSearcher.
+                               (MultiReader. ^MultiReader searchable true)
+                               ^ExecutorService @executor)))
+      (assoc opts :searcher (IndexSearcher. ^MultiReader searchable)))))
 
-(defn get-searcher []
+(defn- get-searcher-no-projects []
   (IndexSearcher. (DirectoryReader/open
                    (FSDirectory/open
                     (File.
                      (str (get-data-root-path) "/index"))))))
+
+(defn- get-searcher [opts]
+  (if (has-projects?)
+    (get-searcher-in-projects (get-projects) opts)
+    (get-searcher-no-projects)))
 
 (defn get-sort []
   (Sort. (SortField. "date" SortField$Type/STRING true)))
@@ -81,24 +94,29 @@
 (defn get-hits-per-page []
   (.getHitsPerPage ^RuntimeEnvironment env))
 
-(defn get-fdocs [page ^IndexSearcher searcher ^Query query]
-  (.search searcher query (int (* page (get-hits-per-page))) ^Sort (get-sort)))
+(defn get-fdocs [opts]
+  (assoc opts :fdocs
+         (.search ^IndexSearcher (:searcher opts) ^Query (:query opts)
+                  (int (* (:page opts) (get-hits-per-page))) ^Sort (get-sort))))
 
-(defn get-total-hits [^TopFieldDocs fdocs]
-  (.totalHits fdocs))
+(defn get-total-hits [opts]
+  (let [total-hits (.totalHits ^TopFieldDocs (:fdocs opts))
+        total-page (inc (int (/ total-hits (get-hits-per-page))))]
+    (assoc opts :total-hits total-hits :total-page total-page)))
 
-(defn get-hits [^TopFieldDocs fdocs]
-  (.scoreDocs fdocs))
+(defn get-hits [opts]
+  (assoc opts :hits (.scoreDocs ^TopFieldDocs (:fdocs opts))))
 
-(defn get-page-hits [page hits]
+(defn get-page-hits [opts]
   (let [hpp (get-hits-per-page)
-        n (* (dec page) hpp)]
-    (->> hits
-         (drop n)
-         (take hpp))))
+        n (* (dec (:page opts)) hpp)]
+    (assoc opts :page-hits (->> (:hits opts)
+                                (drop n)
+                                (take hpp)))))
 
-(defn get-docs [^IndexSearcher searcher hits]
-  (map #(.doc searcher (.doc ^ScoreDoc %)) hits))
+(defn get-docs [opts]
+  (assoc opts :docs
+         (map #(.doc ^IndexSearcher (:searcher opts) (.doc ^ScoreDoc %)) (:page-hits opts))))
 
 (defn get-tags-field [^Document doc]
   (.getField doc "tags"))
@@ -138,66 +156,58 @@
 
     (map #(print-hit %) hit)))
 
-(defn get-tags [source-context history-context docs]
-  (remove nil? (flatten
-                (map #(get-tag source-context history-context %) docs))))
+(defn get-tags [opts]
+  (assoc opts :tags (remove nil? (flatten
+                                  (map #(get-tag (:source-context opts)
+                                                 (:history-context opts) %)
+                                       (:docs opts))))))
 
-(defn set-configuration [^String conf]
-  (.readConfiguration ^RuntimeEnvironment env (File. conf)))
-
-(defn print-tags [tags]
-  (doseq [result tags]
-    (println result)))
-
-(defn print-page [page totalhits]
-  (let [len (take 10 (drop (* 10 (int (/ (dec page) 10)))
-                           (range 1 (inc (/ totalhits (get-hits-per-page))))))]
-    (doseq [num len]
-      (if (= num page)
-        (print (str " [" num "]"))
-        (print "" num))
-      (when (not= num (last len))
-        (print " |"))))
-  (println ""))
-
-(defn projects? []
-  (.hasProjects ^RuntimeEnvironment env))
-
-(defn get-projects []
-  (.getProjects ^RuntimeEnvironment env))
-
-(defn get-page [page totalhits]
-  (str (inc (* (dec page) (get-hits-per-page))) " - "
-       (let [p (* page (get-hits-per-page))]
-         (if (> p totalhits)
-           totalhits
-           p))))
-
-(defn destroy-resource [^IndexSearcher searcher]
-  (IOUtils/close ^IndexReader (.getIndexReader searcher))
+(defn close [opts]
+  (IOUtils/close ^IndexReader (.getIndexReader ^IndexSearcher (:searcher opts)))
   (when @executor
     (.shutdown ^ExecutorService @executor)))
 
-(defn search [options]
-  (when-let [page (:page options)]
-    (when (nil? @current-configuration)
-      (reset! current-configuration (:conf options))
-      (set-configuration @current-configuration))
-    (let [root (get-root-path)
-          query-builder (get-query-builder)
-          query (get-query query-builder options)
-          source-context (get-source-context query query-builder)
-          history-context (get-history-context query)
-          searcher (if (projects?)
-                     (get-searcher-in-projects (get-projects))
-                     (get-searcher))
-          fdocs (get-fdocs page searcher query)
-          totalhits (get-total-hits fdocs)
-          hits (get-hits fdocs)
-          hits (get-page-hits page hits)
-          docs (get-docs searcher hits)
-          tags (get-tags source-context history-context docs)]
-      (when (pos? (count tags))
-        (println "Results:" page "/" (int (inc (/ totalhits (get-hits-per-page)))))
-        (print-tags tags))
-      (destroy-resource searcher))))
+(defn get-tags-list [opts]
+  (->> opts
+       make-query-builder
+       make-query
+       make-source-context
+       make-history-context
+       get-searcher
+       get-fdocs
+       get-total-hits
+       get-hits
+       get-page-hits
+       get-docs
+       get-tags))
+
+(defn- print-page-info [opts]
+  (println (:page opts) "/" (:total-page opts)))
+
+(defn- search-page [opts]
+  (let [opts (get-tags-list opts)]
+    (print-page-info opts)
+    (doseq [result (:tags opts)]
+      (println result))
+    (close opts)))
+
+(defn- search-all [opts]
+  (let [opts (get-tags-list opts)
+        total-page (:total-page opts)]
+    (print-page-info opts)
+    (doseq [result (:tags opts)]
+      (println result))
+    (close opts)
+
+    (doseq [page (range 2 (inc total-page))]
+      (search-page (assoc opts :page page)))))
+
+(def search
+  (let [curr-conf (atom nil)]
+    (fn [opts]
+      (when-not @curr-conf
+        (reset! curr-conf (:conf opts))
+        (read-configuration (:conf opts)))
+      (if (contains? opts :all)
+        (search-all opts)
+        (search-page opts)))))
