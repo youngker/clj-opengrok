@@ -15,6 +15,7 @@
    ["-f" "--text TEXT" "Full Text"]
    ["-t" "--type TYPE" "Type"]
    ["-a" "--all"]
+   ["-i" "--hidden"]
    ["-help" "--help"]])
 
 (defn usage [options-summary]
@@ -44,6 +45,11 @@
                       (:options (parse-opts args cli-options))
                       {:page (or page 1)})))
 
+(defn- prompt-name [opts]
+  (if (contains? @opts :hidden)
+    ""
+    "\nclj-opengrok > "))
+
 (defn- loop-prompt [args]
   (let [opts (atom {})]
     (search (set-search-options opts args))
@@ -61,7 +67,7 @@
               :short-info "next page"
               :long-info "E.g.: next or n"}
        :n :next}
-      :prompt-string "clj-opengrok > "}))
+      :prompt-string (prompt-name opts)}))
   (exit 0 "done"))
 
 (defn -main [& args]

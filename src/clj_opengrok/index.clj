@@ -5,7 +5,7 @@
    [org.opensolaris.opengrok.configuration RuntimeEnvironment Configuration])
   (:gen-class))
 
-(defn- get-configuration [args]
+(defn- get-configuration [^String args]
   (nth args (inc (.indexOf args "-W"))))
 
 (defn- get-args [args file]
@@ -13,7 +13,7 @@
 
 (defn -main [& args]
   (let [config (new Configuration)
-        file (File. (get-configuration args))]
+        file (File. ^String (get-configuration args))]
     (.setHistoryCache config false)
     (.setConfiguration (RuntimeEnvironment/getInstance) config)
     (.mkdirs (.getParentFile file))
