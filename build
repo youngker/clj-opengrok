@@ -1,0 +1,5 @@
+#!/bin/sh
+
+lein uberjar
+
+cat bash_executable_stub.sh target/clj-opengrok-0.4.0-standalone.jar > clj-opengrok && chmod +x clj-opengrok

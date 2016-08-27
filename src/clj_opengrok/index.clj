@@ -2,23 +2,36 @@
   (:import
    [java.io File]
    [org.opensolaris.opengrok.index Indexer]
-   [org.opensolaris.opengrok.configuration RuntimeEnvironment Configuration])
-  (:gen-class))
+   [org.opensolaris.opengrok.configuration RuntimeEnvironment Configuration]))
 
-(defn- get-configuration [^String args]
-  (nth args (inc (.indexOf args "-W"))))
+(defn- get-configuration [opts]
+  (str (:src-root opts) "/.opengrok/configuration.xml"))
 
-(defn- get-args [args file]
-  (conj args file "-R" "-e"))
+(defn- ignore-files []
+  (mapcat #(list "-i" %) '(".opengrok" "out" "*.so" "*.a" "*.o" "*.gz" "*.bz2"
+                           "*.jar" "*.zip" "*.class")))
 
-(defn -main [& args]
+(defn- get-args [opts]
+  ((comp vec flatten vector)
+   "-Xmx2048m"
+   "-r" "on"
+   "-c" (System/getenv "CTAGS_PATH")
+   "-a" "on"
+   "-W" (get-configuration opts)
+   "-R" (get-configuration opts)
+   "-S"
+   "-s" (:src-root opts)
+   "-d" (str (:src-root opts) "/.opengrok")
+   "-H" "-q"
+   "-P" "-e"
+   (ignore-files)))
+
+(defn index [opts]
   (let [config (new Configuration)
-        file (File. ^String (get-configuration args))]
-    (.setHistoryCache config false)
+        file (File. ^String (get-configuration opts))]
+    (.setHistoryCache config true)
     (.setConfiguration (RuntimeEnvironment/getInstance) config)
     (.mkdirs (.getParentFile file))
     (.createNewFile file)
     (.writeConfiguration (RuntimeEnvironment/getInstance) file)
-    (println (get-configuration args))
-    (println (get-args args (get-configuration args)))
-    (Indexer/main (into-array (get-args args (get-configuration args))))))
+    (Indexer/main (into-array (get-args opts)))))
