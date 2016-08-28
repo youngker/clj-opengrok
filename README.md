@@ -2,13 +2,9 @@
 
 Command Line Interface for OpenGrok
 
+## Requirements
 
-
-## ScreenShot
-
-<img align="center" src="https://raw.github.com/youngker/clj-opengrok/master/img/usage.png">
-<img align="center" src="https://raw.github.com/youngker/clj-opengrok/master/img/pagination.png">
-<img align="center" src="https://raw.github.com/youngker/clj-opengrok/master/img/command.png">
+* Java 1.8
 
 ## Installation
 
@@ -16,35 +12,47 @@ Command Line Interface for OpenGrok
 
 [clj-opengrok-0.3.0-standalone.jar.zip](https://github.com/youngker/clj-opengrok/files/126413/clj-opengrok-0.3.0-standalone.jar.zip)
 
+## Usage
+
+### Indexing
+
 ```shell
-$ java -jar clj-opengrok-0.3.0-standalone.jar -R /path/to/configuration.xml -f text
+$ clj-opengrok index -s /path/to/project -P
 ```
 
-## Requirements
+### Searching
 
-* Java 1.8
+```shell
+$ clj-opengrok search -R /path/to/project/.opengrok/configuration.xml -f text
+```
 
 ## Building
 
-- Download OpenGrok latest release [https://github.com/OpenGrok/OpenGrok/releases](https://github.com/OpenGrok/OpenGrok/releases)
+* Install lein-localrepo [https://github.com/kumarshantanu/lein-localrepo](https://github.com/kumarshantanu/lein-localrepo)
 
-- Install lein-localrepo [https://github.com/kumarshantanu/lein-localrepo](https://github.com/kumarshantanu/lein-localrepo)
+* Download OpenGrok latest release [https://github.com/OpenGrok/OpenGrok/releases](https://github.com/OpenGrok/OpenGrok/releases)
 
-- Install opengrok.jar
+* Install opengrok.jar
 
 ```shell
 $ cd opengrok-0.12.1.5/lib
 $ lein localrepo install opengrok.jar org.opensolaris/opengrok 0.12.1.5
 ```
 
-- Install jrcs.jar
+* Install jrcs.jar
 
 ```shell
 $ cd opengrok-0.12.1.5/lib/lib
 $ lein localrepo install jrcs.jar org.apache.commons/jrcs 0.12.1.5
 ```
 
--
+* Executable jar (requires shell)
+
+```shell
+$ cd clj-opengrok
+$ ./build
+$ cp clj-opengrok /usr/local/bin
+```
 
 
 ## License
