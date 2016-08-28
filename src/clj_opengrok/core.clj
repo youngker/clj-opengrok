@@ -13,7 +13,9 @@
    ["-h" "--hist HIST" "History"]
    ["-f" "--text TEXT" "Full Text"]
    ["-t" "--type TYPE" "Type"]
-   ["-s" "--src-root SRC_ROOT" "Source Root"]])
+   ["-q" "--quiet" "Does not show page."]
+   ["-s" "--src-root SRC_ROOT" "Source Root"]
+   ["-P" "--project" "Enable Project"]])
 
 (defn usage [options-summary]
   (string/join

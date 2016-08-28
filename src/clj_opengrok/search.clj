@@ -77,16 +77,17 @@
                                ^ExecutorService @executor)))
       (assoc opts :searcher (IndexSearcher. ^MultiReader searchable)))))
 
-(defn- get-searcher-no-projects []
-  (IndexSearcher. (DirectoryReader/open
-                   (FSDirectory/open
-                    (File.
-                     (str (get-data-root-path) "/index"))))))
+(defn- get-searcher-no-projects [opts]
+  (assoc opts
+         :searcher (IndexSearcher. (DirectoryReader/open
+                                    (FSDirectory/open
+                                     (File.
+                                      (str (get-data-root-path) "/index")))))))
 
 (defn- get-searcher [opts]
   (if (has-projects?)
     (get-searcher-in-projects (get-projects) opts)
-    (get-searcher-no-projects)))
+    (get-searcher-no-projects opts)))
 
 (defn- get-sort []
   (Sort. (SortField. "date" SortField$Type/STRING true)))
@@ -153,7 +154,7 @@
       (.getContext history-context
                    (str (get-root-path) filename) filename hit))
 
-    (when (and (not  source-context) (not history-context))
+    (when (and (.isEmpty source-context) (.isEmpty history-context))
       (.add hit (Hit. filename "..." "1" false true)))
 
     (map #(print-hit %) hit)))
@@ -184,7 +185,8 @@
        get-tags))
 
 (defn- print-page-info [opts]
-  (println (:page opts) "/" (:total-page opts)))
+  (when-not (:quiet opts)
+    (println (format "clj-opengrok> %s/%s" (:page opts) (:total-page opts)))))
 
 (defn- search-page [opts]
   (let [opts (get-tags-list opts)]

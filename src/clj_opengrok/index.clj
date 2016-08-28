@@ -7,9 +7,9 @@
 (defn- get-configuration [opts]
   (str (:src-root opts) "/.opengrok/configuration.xml"))
 
-(defn- ignore-files []
-  (mapcat #(list "-i" %) '(".opengrok" "out" "*.so" "*.a" "*.o" "*.gz" "*.bz2"
-                           "*.jar" "*.zip" "*.class")))
+(def ignore-file-lists
+  '(".opengrok" "out" "*.so" "*.a" "*.o" "*.gz" "*.bz2" "*.jar" "*.zip"
+    "*.class" "*.elc"))
 
 (defn- get-args [opts]
   ((comp vec flatten vector)
@@ -23,8 +23,8 @@
    "-s" (:src-root opts)
    "-d" (str (:src-root opts) "/.opengrok")
    "-H" "-q"
-   "-P" "-e"
-   (ignore-files)))
+   "-e" (when (:project opts) "-P")
+   (interleave (repeat "-i") ignore-file-lists)))
 
 (defn index [opts]
   (let [config (new Configuration)
@@ -34,4 +34,4 @@
     (.mkdirs (.getParentFile file))
     (.createNewFile file)
     (.writeConfiguration (RuntimeEnvironment/getInstance) file)
-    (Indexer/main (into-array (get-args opts)))))
+    (Indexer/main (into-array (remove nil? (get-args opts))))))
