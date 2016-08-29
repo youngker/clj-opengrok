@@ -5,6 +5,7 @@ Command Line Interface for OpenGrok
 ## Requirements
 
 * Java 1.8
+* Exuberant Ctags
 
 ## Installation
 
@@ -15,7 +16,7 @@ Command Line Interface for OpenGrok
 ### Indexing
 
 ```shell
-$ clj-opengrok index -s /path/to/project -P
+$ clj-opengrok index -s /path/to/project -e
 ```
 
 ### Searching

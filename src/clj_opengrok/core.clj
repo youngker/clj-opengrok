@@ -1,8 +1,9 @@
 (ns clj-opengrok.core
-  (:require [clj-opengrok.search :as search]
-            [clj-opengrok.index :as index]
-            [clojure.string :as string]
-            [clojure.tools.cli :refer [parse-opts]])
+  (:require
+   [clj-opengrok.index :as index]
+   [clj-opengrok.search :as search]
+   [clojure.string :as string]
+   [clojure.tools.cli :refer [parse-opts]])
   (:gen-class))
 
 (def cli-options
@@ -13,9 +14,10 @@
    ["-h" "--hist HIST" "History"]
    ["-f" "--text TEXT" "Full Text"]
    ["-t" "--type TYPE" "Type"]
+   ["-o" "--sort SORT" "date or path :default relevance"]
    ["-q" "--quiet" "Does not show page."]
    ["-s" "--src-root SRC_ROOT" "Source Root"]
-   ["-P" "--project" "Enable Project"]])
+   ["-e" "--project" "Enable Project"]])
 
 (defn usage [options-summary]
   (string/join

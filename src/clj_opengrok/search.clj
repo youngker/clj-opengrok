@@ -1,24 +1,26 @@
 (ns clj-opengrok.search
   (:import
-   [java.io File InputStreamReader FileInputStream]
-   [java.util List ArrayList]
-   [java.util.concurrent Executors ExecutorService]
-   org.apache.lucene.index.IndexableField
-   org.apache.lucene.document.Document
-   org.apache.lucene.store.FSDirectory
-   org.opensolaris.opengrok.util.IOUtils
-   [org.opensolaris.opengrok.search.context Context HistoryContext]
-   [org.opensolaris.opengrok.configuration RuntimeEnvironment Project]
-   [org.opensolaris.opengrok.search Hit QueryBuilder]
-   [org.opensolaris.opengrok.analysis Definitions]
-   [org.apache.lucene.index IndexReader MultiReader DirectoryReader]
-   [org.apache.lucene.search IndexSearcher Sort SortField
-    SortField$Type ScoreDoc TopFieldDocs Query]))
+   (java.io File FileInputStream InputStreamReader)
+   (java.util ArrayList List)
+   (java.util.concurrent Executors ExecutorService)
+   (org.apache.lucene.document Document)
+   (org.apache.lucene.index DirectoryReader IndexReader MultiReader)
+   (org.apache.lucene.index IndexableField)
+   (org.apache.lucene.search IndexSearcher Query ScoreDoc Sort SortField
+                             SortField$Type TopFieldDocs)
+   (org.apache.lucene.store FSDirectory)
+   (org.opensolaris.opengrok.analysis Definitions)
+   (org.opensolaris.opengrok.configuration Project RuntimeEnvironment)
+   (org.opensolaris.opengrok.search Hit QueryBuilder)
+   (org.opensolaris.opengrok.search.context Context HistoryContext)
+   (org.opensolaris.opengrok.util IOUtils)))
 
-(def env (RuntimeEnvironment/getInstance))
+(def ^{:private true} ^RuntimeEnvironment env (RuntimeEnvironment/getInstance))
+
+(def ^{:private true} executor (atom nil))
 
 (defn- read-configuration [^String conf]
-  (.readConfiguration ^RuntimeEnvironment env (File. conf)))
+  (.readConfiguration env (File. conf)))
 
 (defn- make-query-builder [opts]
   (assoc opts :query-builder (QueryBuilder.)))
@@ -43,27 +45,25 @@
   (assoc opts :history-context (HistoryContext. (:query opts))))
 
 (defn- has-projects? []
-  (.hasProjects ^RuntimeEnvironment env))
+  (.hasProjects env))
 
 (defn- get-projects []
-  (.getProjects ^RuntimeEnvironment env))
+  (.getProjects env))
 
 (defn- number-processor []
   (.availableProcessors (Runtime/getRuntime)))
 
 (defn- get-root-path ^String []
-  (.getSourceRootPath ^RuntimeEnvironment env))
+  (.getSourceRootPath env))
 
-(defn- get-data-root-path []
-  (.getDataRootFile ^RuntimeEnvironment env))
+(defn- get-data-root-path ^String []
+  (.getDataRootFile env))
 
 (defn- get-index-reader [projects]
   (map #(DirectoryReader/open
          (FSDirectory/open
           (File. (str (get-data-root-path)
                       "/index" (.getPath ^Project %))))) projects))
-
-(def executor (atom nil))
 
 (defn- get-searcher-in-projects [projects opts]
   (let [np (number-processor)
@@ -89,16 +89,20 @@
     (get-searcher-in-projects (get-projects) opts)
     (get-searcher-no-projects opts)))
 
-(defn- get-sort []
-  (Sort. (SortField. "date" SortField$Type/STRING true)))
+(defn- get-sort [opts]
+  (let [sort (:sort opts)]
+    (cond
+      (= sort "date") (Sort. (SortField. "date" SortField$Type/STRING true))
+      (= sort "path") (Sort. (SortField. "fullpath" SortField$Type/STRING))
+      :else (Sort/RELEVANCE))))
 
 (defn- get-hits-per-page []
-  (.getHitsPerPage ^RuntimeEnvironment env))
+  (.getHitsPerPage env))
 
 (defn- get-fdocs [opts]
   (assoc opts :fdocs
          (.search ^IndexSearcher (:searcher opts) ^Query (:query opts)
-                  (int (* (:page opts) (get-hits-per-page))) ^Sort (get-sort))))
+                  (int (* (:page opts) (get-hits-per-page))) ^Sort (get-sort opts))))
 
 (defn- get-total-hits [opts]
   (let [total-hits (.totalHits ^TopFieldDocs (:fdocs opts))
