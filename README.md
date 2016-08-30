@@ -48,9 +48,8 @@ $ lein localrepo install jrcs.jar org.apache.commons/jrcs 0.12.1.5
 * Executable jar (requires shell)
 
 ```shell
-$ cd clj-opengrok
-$ ./build
-$ cp clj-opengrok /usr/local/bin
+$ lein bin
+$ cp target/clj-opengrok /usr/local/bin
 ```
 
 
