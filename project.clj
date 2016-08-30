@@ -16,6 +16,7 @@
   :plugins [[elastic/lein-bin "0.3.6"]]
   :bin {:name "clj-opengrok"}
   :global-vars {*warn-on-reflection* true}
+  :jvm-opts ["-Xmx2g"]
   :aot :all
   :main clj-opengrok.core
   )

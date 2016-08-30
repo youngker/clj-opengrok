@@ -1,5 +1,8 @@
 #!/bin/sh
 
-lein uberjar
+lein bin
 
-cat bash_executable_stub.sh target/clj-opengrok-0.4.0-standalone.jar > clj-opengrok && chmod +x clj-opengrok
+# emacs
+echo "#!/usr/bin/env sh" | cat - target/clj-opengrok > clj-opengrok && chmod +x clj-opengrok
+# windows
+cp -a target/clj-opengrok clj-opengrok.bat

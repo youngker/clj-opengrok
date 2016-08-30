@@ -188,13 +188,13 @@
        get-docs
        get-tags))
 
-(defn- print-page-info [opts]
+(defn- page-info [opts]
   (when-not (:quiet opts)
     (println (format "clj-opengrok> %s/%s" (:page opts) (:total-page opts)))))
 
 (defn- search-page [opts]
   (let [opts (get-tags-list opts)]
-    (print-page-info opts)
+    (page-info opts)
     (doseq [result (:tags opts)]
       (println result))
     (close opts)))
@@ -203,7 +203,7 @@
   (read-configuration (:conf opts))
   (let [opts (get-tags-list (assoc opts :page 1))
         total-page (:total-page opts)]
-    (print-page-info opts)
+    (page-info opts)
     (doseq [result (:tags opts)]
       (println result))
     (close opts)
