@@ -45,11 +45,13 @@ $ cd opengrok-0.12.1.5/lib/lib
 $ lein localrepo install jrcs.jar org.apache.commons/jrcs 0.12.1.5
 ```
 
-* Executable jar (requires shell)
+* Executable jar
 
 ```shell
-$ lein bin
-$ cp target/clj-opengrok /usr/local/bin
+$ ./build
+$ cp clj-opengrok /usr/local/bin
+                or
+$ copy clj-opengrok.bat C:\path\to\bin
 ```
 
 
