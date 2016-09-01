@@ -134,9 +134,9 @@
                  ^Query query ^QueryBuilder qb opts]
   (let [hpp (hits-per-page)
         n (* (dec (:page opts)) hpp)
-        scores (take hpp (drop n (.scoreDocs fdocs)))]
-    (doseq [score scores]
-      (hit (.doc searcher (.doc ^ScoreDoc score)) query qb))
+        scoredocs (take hpp (drop n (.scoreDocs fdocs)))]
+    (doseq [scoredoc scoredocs]
+      (hit (.doc searcher (.doc ^ScoreDoc scoredoc)) query qb))
     (close searcher)))
 
 (defn- search-page [opts]
@@ -147,10 +147,10 @@
         total-page (total-page fdocs)]
     (page-info (assoc opts :total-page total-page))
     (document searcher fdocs query qb opts)
-    {:total-page total-page :page (:page opts)}))
+    {:total-page total-page}))
 
 (defn search [opts]
   (read-configuration (:conf opts))
-  (let [context (search-page (assoc opts :page 1))]
-    (doseq [page (range 2 (inc (:total-page context)))]
-      (search-page (assoc opts :page page)))))
+  (loop [page 1]
+    (when (< page (:total-page (search-page (assoc opts :page page))))
+      (recur (inc page)))))
