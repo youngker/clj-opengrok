@@ -4,12 +4,10 @@
    (java.util ArrayList List)
    (java.util.concurrent Executors ExecutorService)
    (org.apache.lucene.document Document)
-   (org.apache.lucene.index DirectoryReader IndexableField IndexReader
-                            MultiReader)
+   (org.apache.lucene.index DirectoryReader IndexReader MultiReader)
    (org.apache.lucene.search IndexSearcher Query ScoreDoc Sort SortField
                              SortField$Type TopFieldDocs)
    (org.apache.lucene.store FSDirectory)
-   (org.opensolaris.opengrok.analysis Definitions)
    (org.opensolaris.opengrok.configuration Project RuntimeEnvironment)
    (org.opensolaris.opengrok.search Hit QueryBuilder)
    (org.opensolaris.opengrok.search.context Context HistoryContext)
@@ -31,23 +29,23 @@
 (defn- number-processor []
   (.availableProcessors (Runtime/getRuntime)))
 
-(defn- get-root-path ^String []
+(defn- root-path ^String []
   (.getSourceRootPath env))
 
-(defn- get-data-root-path ^String []
+(defn- data-root-path ^String []
   (.getDataRootFile env))
 
 (defn- hits-per-page []
   (.getHitsPerPage env))
 
-(defn- get-sort ^Sort [opts]
+(defn- get-sort [opts]
   (let [sort (:sort opts)]
     (cond
       (= sort "date") (Sort. (SortField. "date" SortField$Type/STRING true))
       (= sort "path") (Sort. (SortField. "fullpath" SortField$Type/STRING))
       :else (Sort/RELEVANCE))))
 
-(defn- query-builder ^QueryBuilder [opts]
+(defn- query-builder [opts]
   (let [qb (QueryBuilder.)]
     (doto qb
       (.setDefs (:def opts))
@@ -61,7 +59,7 @@
 (defn- subreaders [projects]
   (map #(DirectoryReader/open
          (FSDirectory/open
-          (File. (str (get-data-root-path)
+          (File. (str (data-root-path)
                       "/index" (.getPath ^Project %))))) projects))
 
 (defn- search-multi-database [projects]
@@ -78,7 +76,7 @@
 (defn- search-single-database []
   (IndexSearcher. (DirectoryReader/open
                    (FSDirectory/open
-                    (File. (str (get-data-root-path) "/index"))))))
+                    (File. (str (data-root-path) "/index"))))))
 
 (defn- searcher []
   (if (has-projects?)
@@ -87,7 +85,7 @@
 
 (defn- fdocs [^IndexSearcher searcher ^Query query opts]
   (.search searcher query nil
-           (int (* (:page opts) (hits-per-page))) (get-sort opts)))
+           (* (:page opts) (hits-per-page)) (get-sort opts)))
 
 (defn- total-page [^TopFieldDocs fdocs]
   (let [total-hits (.totalHits fdocs)]
@@ -97,15 +95,8 @@
   (when-not (:quiet opts)
     (println (format "clj-opengrok> %s/%s" (:page opts) (:total-page opts)))))
 
-(defn- documents [^IndexSearcher searcher ^TopFieldDocs fdocs opts]
-  (let [hpp (hits-per-page)
-        n (* (dec (:page opts)) hpp)]
-    (page-info opts)
-    (map #(.doc searcher (.doc ^ScoreDoc %))
-         (take hpp (drop n (.scoreDocs fdocs))))))
-
 (defn- print-hit [^Hit hit]
-  (let [file (.getAbsolutePath (File. (get-root-path) (.getPath hit)))
+  (let [file (.getAbsolutePath (File. (root-path) (.getPath hit)))
         line-num (.getLineno hit)
         line (.getLine hit)]
     (println (str file ":" line-num ": "
@@ -121,12 +112,12 @@
       (when (= "p" (.get doc "t"))
         (.getContext scontext
                      (InputStreamReader.
-                      (FileInputStream. (str (get-root-path) file)))
+                      (FileInputStream. (str (root-path) file)))
                      nil nil nil file nil false false hit))
 
       (not (.isEmpty hcontext))
       (.getContext hcontext
-                   (str (get-root-path) file) file hit)
+                   (str (root-path) file) file hit)
 
       :else
       (.add hit (Hit. file "..." "1" false true)))
@@ -134,29 +125,32 @@
     (doseq [h hit]
       (print-hit h))))
 
-(defn- hits [docs ^Query query ^QueryBuilder qb]
-  (remove nil? (flatten (map #(hit % query qb) docs))))
-
 (defn- close [^IndexSearcher searcher]
   (IOUtils/close ^IndexReader (.getIndexReader searcher))
   (when @executor
     (.shutdown ^ExecutorService @executor)))
 
+(defn- document [^IndexSearcher searcher ^TopFieldDocs fdocs
+                 ^Query query ^QueryBuilder qb opts]
+  (let [hpp (hits-per-page)
+        n (* (dec (:page opts)) hpp)
+        scores (take hpp (drop n (.scoreDocs fdocs)))]
+    (doseq [score scores]
+      (hit (.doc searcher (.doc ^ScoreDoc score)) query qb))
+    (close searcher)))
+
 (defn- search-page [opts]
-  (let [qb (query-builder opts)
+  (let [qb ^QueryBuilder (query-builder opts)
         query (.build qb)
         searcher (searcher)
         fdocs (fdocs searcher query opts)
-        total-page (total-page fdocs)
-        documents (documents searcher fdocs
-                             (assoc opts :total-page total-page))
-        hits (hits documents query qb)
-        close (close searcher)]
+        total-page (total-page fdocs)]
+    (page-info (assoc opts :total-page total-page))
+    (document searcher fdocs query qb opts)
     {:total-page total-page :page (:page opts)}))
 
 (defn search [opts]
   (read-configuration (:conf opts))
-  (let [context (search-page (assoc opts :page 1))
-        total-page (:total-page context)]
-    (doseq [page (range 2 (inc total-page))]
+  (let [context (search-page (assoc opts :page 1))]
+    (doseq [page (range 2 (inc (:total-page context)))]
       (search-page (assoc opts :page page)))))
