@@ -12,6 +12,7 @@
                  [org.apache.lucene/lucene-queryparser "4.7.0"]
                  [org.clojure/clojure "1.8.0"]
                  [org.clojure/tools.cli "0.3.5"]
+                 [org.clojure/tools.logging "0.3.1"]
                  [org.opensolaris/opengrok "0.12.1.5"]]
   :plugins [[elastic/lein-bin "0.3.6"]]
   :bin {:name "clj-opengrok"}

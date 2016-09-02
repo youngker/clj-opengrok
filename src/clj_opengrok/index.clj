@@ -51,4 +51,5 @@
     (.mkdirs (.getParentFile file))
     (.createNewFile file)
     (.writeConfiguration (RuntimeEnvironment/getInstance) file)
-    (Indexer/main (into-array (get-args opts)))))
+    (Indexer/main (into-array (get-args opts)))
+    (println "\n Indexing complete.")))

@@ -1,4 +1,6 @@
 (ns clj-opengrok.search
+  (:require
+   [clojure.tools.logging :as log])
   (:import
    (java.io File FileInputStream InputStreamReader)
    (java.util ArrayList List)
@@ -109,11 +111,14 @@
         hit (ArrayList.)]
     (cond
       (not (.isEmpty scontext))
-      (when (= "p" (.get doc "t"))
-        (.getContext scontext
-                     (InputStreamReader.
-                      (FileInputStream. (str (root-path) file)))
-                     nil nil nil file nil false false hit))
+      (try
+        (when (= "p" (.get doc "t"))
+          (.getContext scontext
+                       (InputStreamReader.
+                        (FileInputStream. (str (root-path) file)))
+                       nil nil nil file nil false false hit))
+        (catch java.io.FileNotFoundException e
+          (log/warn (format "%s is not found." (str (root-path) file)))))
 
       (not (.isEmpty hcontext))
       (.getContext hcontext
@@ -147,10 +152,14 @@
         total-page (total-page fdocs)]
     (page-info (assoc opts :total-page total-page))
     (document searcher fdocs query qb opts)
-    {:total-page total-page}))
+    {:tp total-page :th (.totalHits ^TopFieldDocs fdocs)}))
 
 (defn search [opts]
   (read-configuration (:conf opts))
-  (loop [page 1]
-    (when (< page (:total-page (search-page (assoc opts :page page))))
-      (recur (inc page)))))
+  (loop [p 1]
+    (when-let [{:keys [tp th]} (search-page (assoc opts :page p))]
+      (if (>= p tp)
+        (if (zero? th)
+          (println "\n No match found.")
+          (println "\n Searching complete."))
+        (recur (inc p))))))

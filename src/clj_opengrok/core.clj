@@ -49,6 +49,6 @@
       (not= (count arguments) 1) (exit 1 (usage summary))
       errors (exit 1 (error-msg errors)))
     (case (first arguments)
-      "search" (search/search options)
-      "index" (index/index options)
+      "search" (time (search/search options))
+      "index" (time (index/index options))
       (exit 1 (usage summary)))))
