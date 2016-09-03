@@ -1,17 +1,13 @@
 (ns clj-opengrok.index
   (:require
    [clojure.java.shell :as shell]
-   [clojure.string :refer [trim-newline]])
+   [clojure.string :refer [split trim-newline]])
   (:import
    (java.io File)
    (org.opensolaris.opengrok.configuration Configuration RuntimeEnvironment)
    (org.opensolaris.opengrok.index Indexer)))
 
 (def ^{:private true} into-vector (comp vec flatten vector))
-
-(def ^{:private true} ignore-list
-  (list ".opengrok" "out" "*.so" "*.a" "*.o" "*.gz" "*.bz2" "*.jar" "*.zip"
-        "*.class" "*.elc"))
 
 (defn- ctags [cmd]
   (trim-newline (:out (shell/sh cmd "ctags"))))
@@ -41,7 +37,8 @@
                  "-H" "-q"
                  "-e"
                  (if (:project opts) "-P" [])
-                 (interleave (repeat "-i") ignore-list))))
+                 (interleave (repeat "-i")
+                             (split (:ignore opts) #":")))))
 
 (defn index [opts]
   (let [configuration (new Configuration)

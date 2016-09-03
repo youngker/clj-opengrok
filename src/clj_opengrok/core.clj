@@ -7,29 +7,33 @@
   (:gen-class))
 
 (def cli-options
-  [["-R" "--conf CONF" "configuration.xml"]
-   ["-d" "--def DEF" "Definitions"]
-   ["-r" "--ref REF" "References"]
-   ["-p" "--path PATH" "Path"]
-   ["-h" "--hist HIST" "History"]
-   ["-f" "--text TEXT" "Full Text"]
-   ["-t" "--type TYPE" "Type"]
-   ["-o" "--sort SORT" "date or path :default relevance"]
-   ["-q" "--quiet" "Does not show page."]
-   ["-s" "--src-root SRC_ROOT" "Source Root"]
-   ["-e" "--project" "Enable Project"]])
+  [["-R" "--conf file" "search, /path/to/configuration.xml"]
+   ["-d" "--def definition" "search, definition"]
+   ["-r" "--ref reference" "search, reference"]
+   ["-p" "--path path" "search, file"]
+   ["-h" "--hist history" "search, history"]
+   ["-f" "--text text" "search, text"]
+   ["-t" "--type type" "search, type (c/h/java...)"]
+   ["-o" "--sort order" "search, date or path :default relevance"]
+   ["-q" "--quiet" "search, does not show page."]
+   ["-i" "--ignore file-ext" "index, *.o:*.class:*.zip:.svn:target"]
+   ["-s" "--src-root path" "index, source root path"]
+   ["-e" "--project" "index, enable projects"]])
 
 (defn usage [options-summary]
   (string/join
    \newline
-   ["Index=>"
-    "clj-opengrok index -s src-root-directory"
-    ""
-    "Search=>"
-    "clj-opengrok search -R configuration.xml -[d|r|p|h|f|t] 'query string'"
+   [""
+    "Usage: clj-opengrok action options"
+    "  clj-opengrok index -s /path/to/projects -e"
+    "  clj-opengrok search -R configuration.xml -d|r|p|h|f|t text"
     ""
     "Options:"
     options-summary
+    ""
+    "Actions:"
+    "  index      Creating the index"
+    "  search     Searching the text"
     ""
     "See documentation on https://github.com/youngker/clj-opengrok"]))
 
