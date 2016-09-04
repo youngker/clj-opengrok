@@ -4,14 +4,22 @@ Command Line Interface for OpenGrok
 
 ## Requirements
 
-* Java 1.8
+* OpenGrok
 * Exuberant Ctags
 
 ## Installation
 
-**TODO**
+* Download clj-opengrok
+
+```shell
+$ cp clj-opengrok /usr/local/bin
+                or
+$ copy clj-opengrok.bat C:\path\to\bin
+```
 
 ## Usage
+
+<img align="center" src="https://raw.github.com/youngker/clj-opengrok/master/img/usage.png">
 
 ### Indexing
 
