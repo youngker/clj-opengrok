@@ -4,7 +4,7 @@ Command Line Interface for OpenGrok
 
 ## Requirements
 
-* OpenGrok
+* Java 1.8
 * Exuberant Ctags
 
 ## Installation
