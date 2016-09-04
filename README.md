@@ -9,7 +9,7 @@ Command Line Interface for OpenGrok
 
 ## Installation
 
-* Download clj-opengrok
+* Download [clj-opengrok-0.4.0](https://github.com/youngker/clj-opengrok/releases)
 
 ```shell
 $ cp clj-opengrok /usr/local/bin
