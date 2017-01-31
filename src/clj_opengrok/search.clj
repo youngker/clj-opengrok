@@ -61,8 +61,8 @@
 (defn- subreaders [projects]
   (map #(DirectoryReader/open
          (FSDirectory/open
-          (File. (str (data-root-path)
-                      "/index" (.getPath ^Project %))))) projects))
+          (.toPath (File. (str (data-root-path)
+                               "/index" (.getPath ^Project %)))))) projects))
 
 (defn- search-multi-database [projects]
   (let [np (number-processor)
@@ -78,7 +78,7 @@
 (defn- search-single-database []
   (IndexSearcher. (DirectoryReader/open
                    (FSDirectory/open
-                    (File. (str (data-root-path) "/index"))))))
+                    (.toPath (File. (str (data-root-path) "/index")))))))
 
 (defn- searcher []
   (if (has-projects?)
@@ -86,7 +86,7 @@
     (search-single-database)))
 
 (defn- fdocs [^IndexSearcher searcher ^Query query opts]
-  (.search searcher query nil
+  (.search searcher query
            (* (:page opts) (hits-per-page)) (get-sort opts)))
 
 (defn- total-page [^TopFieldDocs fdocs]

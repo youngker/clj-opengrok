@@ -22,6 +22,9 @@
 (defn- get-args [opts]
   (let [ctags (os)
         src-root (:src-root opts)
+        project (when (:project opts) "-P")
+        ignore (when (:ignore opts)
+                 (interleave (repeat "-i") (split (:ignore opts) #":")))
         conf (conf src-root)
         data-root (str src-root "/.opengrok")]
     (when ctags
@@ -34,11 +37,11 @@
                  "-S"
                  "-s" src-root
                  "-d" data-root
-                 "-H" "-q"
+                 "-H"
+                 "-q"
                  "-e"
-                 (if (:project opts) "-P" [])
-                 (interleave (repeat "-i")
-                             (split (:ignore opts) #":")))))
+                 project
+                 ignore)))
 
 (defn index [opts]
   (let [configuration (new Configuration)
@@ -48,5 +51,5 @@
     (.mkdirs (.getParentFile file))
     (.createNewFile file)
     (.writeConfiguration (RuntimeEnvironment/getInstance) file)
-    (Indexer/main (into-array (get-args opts)))
+    (Indexer/main (into-array (filter identity (get-args opts))))
     (println "\n Indexing complete.")))
