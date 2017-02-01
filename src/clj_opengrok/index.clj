@@ -1,9 +1,11 @@
 (ns clj-opengrok.index
   (:require
+   [clojure.java.io :as io]
    [clojure.java.shell :as shell]
    [clojure.string :refer [split trim-newline]])
   (:import
    (java.io File)
+   (java.util.logging LogManager)
    (org.opensolaris.opengrok.configuration Configuration RuntimeEnvironment)
    (org.opensolaris.opengrok.index Indexer)))
 
@@ -46,6 +48,8 @@
 (defn index [opts]
   (let [configuration (new Configuration)
         file (File. (conf (:src-root opts)))]
+    (with-open [log (io/input-stream (io/resource "logging.properties"))]
+      (.readConfiguration (LogManager/getLogManager) log))
     (.setHistoryCache configuration true)
     (.setConfiguration (RuntimeEnvironment/getInstance) configuration)
     (.mkdirs (.getParentFile file))
