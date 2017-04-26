@@ -41,6 +41,7 @@
                  "-d" data-root
                  "-H"
                  "-q"
+                 "-D"
                  "-e"
                  project
                  ignore)))
