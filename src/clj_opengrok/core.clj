@@ -18,7 +18,8 @@
    ["-q" "--quiet" "search, does not show page."]
    ["-i" "--ignore file-ext" "index, *.o:*.class:*.zip:.svn:target"]
    ["-s" "--src-root path" "index, source root path"]
-   ["-e" "--project" "index, enable projects"]])
+   ["-e" "--project" "index, enable projects"]
+   ["-v" "--version"]])
 
 (defn usage [options-summary]
   (string/join
@@ -45,11 +46,14 @@
   (println msg)
   (System/exit status))
 
+(defn version []
+  (str "clj-opengrok v" (System/getProperty "clj-opengrok.version")))
+
 (defn -main [& args]
   (let [{:keys [options arguments errors summary]}
         (parse-opts args cli-options)]
     (cond
-      (:help options) (exit 0 (usage summary))
+      (:version options) (exit 0 (version))
       (not= (count arguments) 1) (exit 1 (usage summary))
       errors (exit 1 (error-msg errors)))
     (case (first arguments)
