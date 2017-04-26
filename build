@@ -1,7 +1,7 @@
 #!/bin/sh
 
-lein localrepo install lib/opengrok.jar org.opensolaris/opengrok 0.13-rc8
-lein localrepo install lib/jrcs.jar org.opensolaris/opengrok.jrcs 0.13.0
+lein localrepo install lib/opengrok.jar org.opensolaris/opengrok 1.0
+lein localrepo install lib/jrcs.jar org.opensolaris/opengrok.jrcs 1.0
 lein bin
 
 # emacs
