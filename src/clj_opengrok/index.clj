@@ -6,8 +6,8 @@
   (:import
    (java.io File)
    (java.util.logging LogManager)
-   (org.opensolaris.opengrok.configuration Configuration RuntimeEnvironment)
-   (org.opensolaris.opengrok.index Indexer)))
+   (org.opengrok.indexer.configuration Configuration RuntimeEnvironment)
+   (org.opengrok.indexer.index Indexer)))
 
 (def ^{:private true} into-vector (comp vec flatten vector))
 
@@ -31,20 +31,18 @@
         data-root (str src-root "/.opengrok")]
     (when ctags
       (shutdown-agents))
-    (into-vector "-r" "on"
-                 "-c" ctags
-                 "-a" "on"
-                 "-W" conf
-                 "-R" conf
-                 "-S"
-                 "-s" src-root
-                 "-d" data-root
-                 "-H"
-                 "-q"
-                 "-D"
-                 "-e"
-                 project
-                 ignore)))
+    (into-vector
+     "-c" ctags
+     "-W" conf
+     "-S"
+     "-s" src-root
+     "-d" data-root
+     "-H"
+     "-G"
+     "-q"
+     "-e"
+     project
+     ignore)))
 
 (defn index [opts]
   (let [configuration (new Configuration)

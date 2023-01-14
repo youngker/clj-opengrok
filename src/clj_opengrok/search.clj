@@ -2,22 +2,16 @@
   (:require
    [clojure.tools.logging :as log])
   (:import
-   (java.io File FileInputStream InputStreamReader)
-   (java.util ArrayList List)
-   (java.util.concurrent Executors ExecutorService)
+   (java.io File FileInputStream InputStreamReader IOException)
+   (java.util ArrayList TreeSet List)
    (org.apache.lucene.document Document)
-   (org.apache.lucene.index DirectoryReader IndexReader MultiReader)
    (org.apache.lucene.search IndexSearcher Query ScoreDoc Sort SortField
                              SortField$Type TopFieldDocs)
-   (org.apache.lucene.store FSDirectory)
-   (org.opensolaris.opengrok.configuration Project RuntimeEnvironment)
-   (org.opensolaris.opengrok.search Hit QueryBuilder)
-   (org.opensolaris.opengrok.search.context Context HistoryContext)
-   (org.opensolaris.opengrok.util IOUtils)))
+   (org.opengrok.indexer.configuration Project RuntimeEnvironment SuperIndexSearcher)
+   (org.opengrok.indexer.search Hit QueryBuilder)
+   (org.opengrok.indexer.search.context Context HistoryContext)))
 
 (def ^{:private true} ^RuntimeEnvironment env (RuntimeEnvironment/getInstance))
-
-(def ^{:private true} executor (atom nil))
 
 (defn- read-configuration [^String conf]
   (.readConfiguration env (File. conf)))
@@ -26,19 +20,22 @@
   (.hasProjects env))
 
 (defn- get-projects []
-  (.getProjects env))
-
-(defn- number-processor []
-  (.availableProcessors (Runtime/getRuntime)))
+  (.getProjectList env))
 
 (defn- root-path ^String []
   (.getSourceRootPath env))
 
-(defn- data-root-path ^String []
-  (.getDataRootFile env))
-
 (defn- hits-per-page []
   (.getHitsPerPage env))
+
+(defn- get-single-index-searcher [searcher-list]
+  (let [searcher (.getSuperIndexSearcher env "")]
+    (.add ^ArrayList searcher-list searcher)
+    searcher))
+
+(defn- get-multiple-index-searcher [project-names searcher-list]
+  (.newSearcher (.getIndexSearcherFactory env)
+                (.getMultiReader env project-names searcher-list)))
 
 (defn- get-sort [opts]
   (let [sort (:sort opts)]
@@ -58,39 +55,23 @@
       (.setType (:type opts)))
     qb))
 
-(defn- subreaders [projects]
-  (map #(DirectoryReader/open
-         (FSDirectory/open
-          (.toPath (File. (str (data-root-path)
-                               "/index" (.getPath ^Project %)))))) projects))
+(defn- search-multi-database [projects searcher-list]
+  (let [project-names (TreeSet.)]
+    (doseq [^Project project ^List projects]
+      (.add project-names (.getName ^Project project)));
+    (get-multiple-index-searcher project-names searcher-list)))
 
-(defn- search-multi-database [projects]
-  (let [np (number-processor)
-        nthread (+ 2 (* 2 np))
-        subreaders (into-array (subreaders projects))]
-    (if (> np 1)
-      (do
-        (reset! executor (Executors/newFixedThreadPool nthread))
-        (IndexSearcher. (MultiReader. ^MultiReader subreaders true)
-                        ^ExecutorService @executor))
-      (IndexSearcher. ^MultiReader subreaders))))
-
-(defn- search-single-database []
-  (IndexSearcher. (DirectoryReader/open
-                   (FSDirectory/open
-                    (.toPath (File. (str (data-root-path) "/index")))))))
-
-(defn- searcher []
+(defn- searcher [searcher-list]
   (if (has-projects?)
-    (search-multi-database (get-projects))
-    (search-single-database)))
+    (search-multi-database (get-projects) searcher-list)
+    (get-single-index-searcher searcher-list)))
 
 (defn- fdocs [^IndexSearcher searcher ^Query query opts]
   (.search searcher query
            (* (:page opts) (hits-per-page)) (get-sort opts)))
 
 (defn- total-page [^TopFieldDocs fdocs]
-  (let [total-hits (.totalHits fdocs)]
+  (let [total-hits (.value (.totalHits fdocs))]
     (inc (int (/ total-hits (hits-per-page))))))
 
 (defn- page-info [opts]
@@ -105,7 +86,7 @@
                   (if (> (count line) 200) (subs line 0 200) line)))))
 
 (defn- hit [^Document doc ^Query query ^QueryBuilder qb]
-  (let [scontext (Context. query (.getQueries qb))
+  (let [scontext (Context. query qb)
         hcontext (HistoryContext. query)
         file (.get doc "path")
         hit (ArrayList.)]
@@ -130,10 +111,12 @@
     (doseq [h hit]
       (print-hit h))))
 
-(defn- close [^IndexSearcher searcher]
-  (IOUtils/close ^IndexReader (.getIndexReader searcher))
-  (when @executor
-    (.shutdown ^ExecutorService @executor)))
+(defn- destory [searcher-list]
+  (doseq [^SuperIndexSearcher searcher searcher-list]
+    (try
+      (.release searcher)
+      (catch IOException e
+        (log/warn (format "cannot release indexSearcher : %s" e))))))
 
 (defn- document [^IndexSearcher searcher ^TopFieldDocs fdocs
                  ^Query query ^QueryBuilder qb opts]
@@ -141,18 +124,19 @@
         n (* (dec (:page opts)) hpp)
         scoredocs (take hpp (drop n (.scoreDocs fdocs)))]
     (doseq [scoredoc scoredocs]
-      (hit (.doc searcher (.doc ^ScoreDoc scoredoc)) query qb))
-    (close searcher)))
+      (hit (.doc searcher (.doc ^ScoreDoc scoredoc)) query qb))))
 
 (defn- search-page [opts]
   (let [qb ^QueryBuilder (query-builder opts)
         query (.build qb)
-        searcher (searcher)
+        searcher-list (ArrayList.)
+        searcher (searcher searcher-list)
         fdocs (fdocs searcher query opts)
         total-page (total-page fdocs)]
     (page-info (assoc opts :total-page total-page))
     (document searcher fdocs query qb opts)
-    {:tp total-page :th (.totalHits ^TopFieldDocs fdocs)}))
+    (destory searcher-list)
+    {:tp total-page :th (.value (.totalHits ^TopFieldDocs fdocs))}))
 
 (defn search [opts]
   (read-configuration (:conf opts))
