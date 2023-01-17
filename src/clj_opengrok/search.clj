@@ -3,11 +3,12 @@
    [clojure.tools.logging :as log])
   (:import
    (java.io File FileInputStream InputStreamReader IOException)
-   (java.util ArrayList TreeSet List)
+   (java.util ArrayList TreeSet)
    (org.apache.lucene.document Document)
-   (org.apache.lucene.search IndexSearcher Query ScoreDoc Sort SortField
-                             SortField$Type TopFieldDocs)
-   (org.opengrok.indexer.configuration Project RuntimeEnvironment SuperIndexSearcher)
+   (org.apache.lucene.search
+    IndexSearcher Query ScoreDoc Sort SortField SortField$Type TopFieldDocs)
+   (org.opengrok.indexer.configuration
+    Project RuntimeEnvironment SuperIndexSearcher)
    (org.opengrok.indexer.search Hit QueryBuilder)
    (org.opengrok.indexer.search.context Context HistoryContext)))
 
@@ -28,14 +29,8 @@
 (defn- hits-per-page []
   (.getHitsPerPage env))
 
-(defn- get-single-index-searcher [searcher-list]
-  (let [searcher (.getSuperIndexSearcher env "")]
-    (.add ^ArrayList searcher-list searcher)
-    searcher))
-
-(defn- get-multiple-index-searcher [project-names searcher-list]
-  (.newSearcher (.getIndexSearcherFactory env)
-                (.getMultiReader env project-names searcher-list)))
+(defn- shutdown-search-executor []
+  (.shutdownSearchExecutor env))
 
 (defn- get-sort [opts]
   (let [sort (:sort opts)]
@@ -55,30 +50,37 @@
       (.setType (:type opts)))
     qb))
 
+(defn- single-searcher [^ArrayList searcher-list]
+  (let [searcher (.getSuperIndexSearcher env "")]
+    (.add searcher-list searcher)
+    searcher))
+
+(defn- multiple-searcher [project-names searcher-list]
+  (.newSearcher (.getIndexSearcherFactory env)
+                (.getMultiReader env project-names searcher-list)))
+
 (defn- search-multi-database [projects searcher-list]
   (let [project-names (TreeSet.)]
-    (doseq [^Project project ^List projects]
-      (.add project-names (.getName ^Project project)));
-    (get-multiple-index-searcher project-names searcher-list)))
+    (doseq [^Project project projects]
+      (.add project-names (.getName project))) ;
+    (multiple-searcher project-names searcher-list)))
 
 (defn- searcher [searcher-list]
   (if (has-projects?)
     (search-multi-database (get-projects) searcher-list)
-    (get-single-index-searcher searcher-list)))
+    (single-searcher searcher-list)))
 
 (defn- fdocs [^IndexSearcher searcher ^Query query opts]
-  (.search searcher query
-           (* (:page opts) (hits-per-page)) (get-sort opts)))
+  (.search searcher query (* (:page opts) (hits-per-page)) (get-sort opts)))
 
-(defn- total-page [^TopFieldDocs fdocs]
-  (let [total-hits (.value (.totalHits fdocs))]
-    (inc (int (/ total-hits (hits-per-page))))))
+(defn- total-page [total-hits]
+  (inc (int (/ total-hits (hits-per-page)))))
 
-(defn- page-info [opts]
+(defn- show-page-info [opts]
   (when-not (:quiet opts)
     (println (format "clj-opengrok> %s/%s" (:page opts) (:total-page opts)))))
 
-(defn- print-hit [^Hit hit]
+(defn- show-hit [^Hit hit]
   (let [file (.getAbsolutePath (File. (root-path) (.getPath hit)))
         line-num (.getLineno hit)
         line (.getLine hit)]
@@ -99,7 +101,7 @@
                         (FileInputStream. (str (root-path) file)))
                        nil nil nil file nil false false hit))
         (catch java.io.FileNotFoundException e
-          (log/warn (format "%s is not found." (str (root-path) file)))))
+          (log/warnf "%s is not found : %s" (str (root-path) file) e)))
 
       (not (.isEmpty hcontext))
       (.getContext hcontext
@@ -109,41 +111,46 @@
       (.add hit (Hit. file "..." "1" false true)))
 
     (doseq [h hit]
-      (print-hit h))))
-
-(defn- destory [searcher-list]
-  (doseq [^SuperIndexSearcher searcher searcher-list]
-    (try
-      (.release searcher)
-      (catch IOException e
-        (log/warn (format "cannot release indexSearcher : %s" e))))))
+      (show-hit h))))
 
 (defn- document [^IndexSearcher searcher ^TopFieldDocs fdocs
                  ^Query query ^QueryBuilder qb opts]
   (let [hpp (hits-per-page)
         n (* (dec (:page opts)) hpp)
         scoredocs (take hpp (drop n (.scoreDocs fdocs)))]
-    (doseq [scoredoc scoredocs]
-      (hit (.doc searcher (.doc ^ScoreDoc scoredoc)) query qb))))
+    (doseq [^ScoreDoc scoredoc scoredocs]
+      (hit (.doc searcher (.doc scoredoc)) query qb))))
 
-(defn- search-page [opts]
+(defn- search-page [searcher opts]
   (let [qb ^QueryBuilder (query-builder opts)
         query (.build qb)
-        searcher-list (ArrayList.)
-        searcher (searcher searcher-list)
-        fdocs (fdocs searcher query opts)
-        total-page (total-page fdocs)]
-    (page-info (assoc opts :total-page total-page))
+        fdocs ^TopFieldDocs (fdocs searcher query opts)
+        total-hits (.value (.totalHits fdocs))
+        total-page (total-page total-hits)]
+    (show-page-info (assoc opts :total-page total-page))
     (document searcher fdocs query qb opts)
-    (destory searcher-list)
-    {:tp total-page :th (.value (.totalHits ^TopFieldDocs fdocs))}))
+    {:total-page total-page :total-hits total-hits}))
+
+(defn- destory [searcher-list]
+  (doseq [^SuperIndexSearcher searcher searcher-list]
+    (try
+      (.release searcher)
+      (catch IOException e
+        (log/warnf "cannot release indexSearcher : %s" e)))))
 
 (defn search [opts]
-  (read-configuration (:conf opts))
-  (loop [p 1]
-    (when-let [{:keys [tp th]} (search-page (assoc opts :page p))]
-      (if (>= p tp)
-        (if (zero? th)
-          (println "\n No match found.")
-          (println "\n Searching complete."))
-        (recur (inc p))))))
+  (let [_ (read-configuration (:conf opts))
+        searcher-list (ArrayList.)
+        searcher (searcher searcher-list)]
+    (loop [page 1]
+      (when-let [{:keys [total-page total-hits]}
+                 (search-page searcher (assoc opts :page page))]
+        (log/infof "page : %d totalpages : %d hits/page : %d totalhits : %d"
+                   page total-page (hits-per-page) total-hits)
+        (if (>= page total-page)
+          (if (zero? total-hits)
+            (println "\n No match found.")
+            (println "\n Searching complete."))
+          (recur (inc page)))))
+    (destory searcher-list)
+    (shutdown-search-executor)))

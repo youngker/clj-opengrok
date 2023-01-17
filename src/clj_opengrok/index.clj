@@ -47,8 +47,6 @@
 (defn index [opts]
   (let [configuration (new Configuration)
         file (File. (conf (:src-root opts)))]
-    (with-open [log (io/input-stream (io/resource "logging.properties"))]
-      (.readConfiguration (LogManager/getLogManager) log))
     (.setHistoryCache configuration true)
     (.setConfiguration (RuntimeEnvironment/getInstance) configuration)
     (.mkdirs (.getParentFile file))

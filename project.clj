@@ -26,6 +26,8 @@
             [elastic/lein-bin "0.3.6"]]
   :bin {:name "clj-opengrok"}
   :global-vars {*warn-on-reflection* true}
-  :jvm-opts ["-Xmx2g" "-Djava.util.logging.config.file=logging.properties"]
+  :jvm-opts ["-Xmx2g"
+             "-Djava.util.logging.config.file=logging.properties"
+             "-Dclojure.tools.logging.factory=clojure.tools.logging.impl/jul-factory"]
   :aot :all
   :main clj-opengrok.core)

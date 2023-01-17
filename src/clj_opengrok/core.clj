@@ -59,5 +59,4 @@
     (case (first arguments)
       "search" (time (search/search options))
       "index" (time (index/index options))
-      (exit 1 (usage summary)))
-    (System/exit 0)))
+      (exit 1 (usage summary)))))
