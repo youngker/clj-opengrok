@@ -1,20 +1,19 @@
 (ns clj-opengrok.index
   (:require
-   [clojure.java.io :as io]
    [clojure.java.shell :as shell]
    [clojure.string :refer [split trim-newline]])
   (:import
    (java.io File)
-   (java.util.logging LogManager)
    (org.opengrok.indexer.configuration Configuration RuntimeEnvironment)
    (org.opengrok.indexer.index Indexer)))
 
 (def ^{:private true} into-vector (comp vec flatten vector))
+(def ^{:private true} ^RuntimeEnvironment env (RuntimeEnvironment/getInstance))
 
 (defn- ctags [cmd]
   (trim-newline (:out (shell/sh cmd "ctags"))))
 
-(defn- os []
+(defn- get-ctag-path-in-system []
   (let [^String os (get (System/getProperties) "os.name")]
     (if (.contains os "Windows") (ctags "where") (ctags "which"))))
 
@@ -22,35 +21,27 @@
   (str dir "/.opengrok/configuration.xml"))
 
 (defn- get-args [opts]
-  (let [ctags (os)
+  (let [ctags (get-ctag-path-in-system)
         src-root (:src-root opts)
-        project (when (:project opts) "-P")
-        ignore (when (:ignore opts)
-                 (interleave (repeat "-i") (split (:ignore opts) #":")))
-        conf (conf src-root)
-        data-root (str src-root "/.opengrok")]
-    (when ctags
-      (shutdown-agents))
+        data-root (str src-root "/.opengrok")
+        conf (conf src-root)]
     (into-vector
-     "-c" ctags
      "-W" conf
-     "-S"
-     "-s" src-root
+     "-c" ctags
      "-d" data-root
-     "-H"
-     "-G"
-     "-q"
-     "-e"
-     project
-     ignore)))
+     "-s" src-root
+     "-G" "-H" "-S" "-e" "-q"
+     (and (:project opts) "-P")
+     (and (:ignore opts)
+          (interleave (repeat "-i") (split (:ignore opts) #":"))))))
 
 (defn index [opts]
-  (let [configuration (new Configuration)
+  (let [configuration (Configuration.)
         file (File. (conf (:src-root opts)))]
     (.setHistoryCache configuration true)
-    (.setConfiguration (RuntimeEnvironment/getInstance) configuration)
+    (.setConfiguration env configuration)
     (.mkdirs (.getParentFile file))
     (.createNewFile file)
-    (.writeConfiguration (RuntimeEnvironment/getInstance) file)
+    (.writeConfiguration env file)
     (Indexer/main (into-array (filter identity (get-args opts))))
     (println "\n Indexing complete.")))

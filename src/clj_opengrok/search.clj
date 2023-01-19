@@ -35,8 +35,12 @@
 (defn- get-sort [opts]
   (let [sort (:sort opts)]
     (cond
-      (= sort "date") (Sort. (SortField. "date" SortField$Type/STRING true))
-      (= sort "path") (Sort. (SortField. "fullpath" SortField$Type/STRING))
+      (= sort "date")
+      (Sort. (SortField. "date" SortField$Type/STRING true))
+
+      (= sort "path")
+      (Sort. (SortField. "fullpath" SortField$Type/STRING))
+
       :else (Sort/RELEVANCE))))
 
 (defn- query-builder [opts]
@@ -76,10 +80,6 @@
 (defn- total-page [total-hits]
   (inc (int (/ total-hits (hits-per-page)))))
 
-(defn- show-page-info [opts]
-  (when-not (:quiet opts)
-    (println (format "clj-opengrok> %s/%s" (:page opts) (:total-page opts)))))
-
 (defn- show-hit [^Hit hit]
   (let [file (.getAbsolutePath (File. (root-path) (.getPath hit)))
         line-num (.getLineno hit)
@@ -90,7 +90,8 @@
 (defn- hit [^Document doc ^Query query ^QueryBuilder qb]
   (let [scontext (Context. query qb)
         hcontext (HistoryContext. query)
-        file (.get doc "path")
+        relative-path (.get doc "path")
+        absolute-path (str (root-path) relative-path)
         hit (ArrayList.)]
     (cond
       (not (.isEmpty scontext))
@@ -98,20 +99,23 @@
         (when (= "p" (.get doc "t"))
           (.getContext scontext
                        (InputStreamReader.
-                        (FileInputStream. (str (root-path) file)))
-                       nil nil nil file nil false false hit))
+                        (FileInputStream. absolute-path))
+                       nil nil nil relative-path nil false false hit))
         (catch java.io.FileNotFoundException e
-          (log/warnf "%s is not found : %s" (str (root-path) file) e)))
+          (log/warnf "%s is not found : %s" absolute-path e)))
 
       (not (.isEmpty hcontext))
-      (.getContext hcontext
-                   (str (root-path) file) file hit)
+      (.getContext hcontext absolute-path relative-path hit)
 
       :else
-      (.add hit (Hit. file "..." "1" false true)))
+      (.add hit (Hit. relative-path "..." "1" false true)))
 
     (doseq [h hit]
       (show-hit h))))
+
+(defn- show-page-info [opts]
+  (when-not (:quiet opts)
+    (println (format "clj-opengrok> %s/%s" (:page opts) (:total-page opts)))))
 
 (defn- document [^IndexSearcher searcher ^TopFieldDocs fdocs
                  ^Query query ^QueryBuilder qb opts]
