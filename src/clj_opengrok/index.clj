@@ -26,11 +26,12 @@
         data-root (str src-root "/.opengrok")
         conf (conf src-root)]
     (into-vector
+     "-S" "."
      "-W" conf
      "-c" ctags
      "-d" data-root
      "-s" src-root
-     "-G" "-H" "-S" "-e" "-q"
+     "-G" "-H" "-e" "-q"
      (and (:project opts) "-P")
      (and (:ignore opts)
           (interleave (repeat "-i") (split (:ignore opts) #":"))))))
